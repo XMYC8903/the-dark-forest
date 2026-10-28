@@ -1,0 +1,115 @@
+/* Distinct seats and a bounded map surface make the drag destination clear. */
+.seating-label{position:absolute;top:72px;left:25px;z-index:2;color:#b5c2d1;font-size:10px;font-weight:500;letter-spacing:2px}
+.seating-label small{margin-left:8px;color:#657a91;font-size:8px;letter-spacing:0;font-weight:400}
+.seating-label.right-label{right:25px;left:auto}
+.player{background:linear-gradient(130deg,#243249,#182538);border-color:#52657c;box-shadow:0 5px 14px #0002;border-left:3px solid #728397}
+.player .avatar{background:#324154;border-color:#718197;color:#d2dbe4}
+.player .avatar.deepseek-avatar{background:#253c4b;border-color:#68a6ba;color:#9bd4e1;box-shadow:inset 0 0 0 1px #9bd4e122}
+.player .avatar.deepseek-avatar img{display:block;width:23px;height:19px;object-fit:contain}
+.player-name{color:#e1e7ee;white-space:nowrap}.player-sub{color:#8796a9}
+.starmap-wrap{--drop-color:#91b9cb;left:215px;right:215px;top:71px;height:calc(100% - 184px);border:1px solid #4c7287;border-radius:13px;background:radial-gradient(ellipse at 50% 50%,#2749566b,#102231 75%);box-shadow:inset 0 0 0 5px #162e3b,0 8px 30px #0002;isolation:isolate;transition:border-color .18s,box-shadow .18s,background .18s}
+.starmap-wrap:after{content:'';position:absolute;inset:8px;border:1px dashed #6e94a224;border-radius:7px;pointer-events:none;z-index:-1}
+.starmap-wrap #starmap{height:calc(100% - 54px);width:100%;margin-top:28px;overflow:visible}
+.map-zone-heading{position:absolute;left:18px;right:18px;top:13px;display:flex;align-items:center;justify-content:space-between;gap:7px;z-index:3;pointer-events:none}
+.map-zone-heading>span{font-size:11px;color:#bfd8e2;letter-spacing:2px;font-weight:600}
+.map-zone-heading small{font-family:'Space Grotesk',sans-serif;font-size:7px;font-weight:400;letter-spacing:1.6px;color:#6c929f;margin-left:9px}
+#drop-label{font-size:9px;font-weight:400;letter-spacing:.5px;color:#9cb6bd;border:1px dashed #749da35e;border-radius:4px;padding:4px 8px}
+.starmap-wrap .map-footer{position:absolute;bottom:9px;left:17px;right:17px;margin:0;font-size:7px;letter-spacing:.4px;color:#6f929e;pointer-events:none}
+.starmap-wrap .system .orbit{fill:#122b3a;stroke:#80a2b6}
+.starmap-wrap .system .system-name{fill:#9bb7c6}
+.starmap-wrap .system .system-id{fill:#d1e0e8}
+.starmap-wrap .map-route{stroke:#97bac9;opacity:.29}
+.starmap-wrap .system.mine .orbit{stroke:#d0dfab;fill:#9fbc7828}
+.starmap-wrap .system.mine .system-id{fill:#dae9c3}
+.drag-ready{border-style:dashed;border-color:var(--drop-color);box-shadow:inset 0 0 0 5px #162e3b,0 0 25px color-mix(in srgb,var(--drop-color) 12%,transparent)}
+.drag-ready #drop-label{color:var(--drop-color);border-color:var(--drop-color)}
+.drag-over{border-style:solid;box-shadow:inset 0 0 0 5px color-mix(in srgb,var(--drop-color) 20%,#162e3b),0 0 0 2px color-mix(in srgb,var(--drop-color) 55%,transparent),0 0 35px color-mix(in srgb,var(--drop-color) 18%,transparent);background:radial-gradient(ellipse at center,color-mix(in srgb,var(--drop-color) 18%,#11202f),#102231 80%)}
+.drag-over #drop-label{background:color-mix(in srgb,var(--drop-color) 12%,#142733)}
+#hand .game-card{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#hand .game-card.drag-origin{opacity:.23;transform:translateY(0);border-style:dashed}
+.card-is-dragging,.card-is-dragging *{cursor:grabbing!important;user-select:none!important}
+.drag-card{position:fixed!important;left:0;top:0;min-width:0!important;max-width:none!important;flex:none!important;z-index:90;pointer-events:none!important;transition:none!important;transform-origin:center;will-change:transform;box-shadow:0 20px 50px #0009,0 0 20px color-mix(in srgb,var(--card-color) 15%,transparent);opacity:1!important}
+.detail-help{font-size:10px!important;color:#8096a5!important;border-top:1px solid #344253;padding-top:12px}
+.starmap-wrap.targeting{border-color:#a2b8a1;box-shadow:inset 0 0 0 5px #162e3b,0 0 0 1px #a1b5a329}
+.targeting .map-zone-heading{visibility:hidden}
+.target-bar{position:absolute;top:10px;bottom:auto;left:50%;transform:translateX(-50%);width:calc(100% - 22px);max-width:none;min-width:0;border:1px solid #607e8e;box-shadow:0 4px 18px #0003;border-radius:7px;background:#142b39f2;padding:6px 8px;gap:11px;z-index:6}
+.target-bar p{flex:1;font-size:11px;line-height:1.5;white-space:nowrap}.target-bar small{font-size:8px;color:#91aab4}
+.target-bar button{font-size:10px;padding:7px 9px;background:#2c4352}
+.aim-card{display:flex;gap:6px;align-items:center;border:1px solid color-mix(in srgb,var(--card-color) 60%,#263c47);background:color-mix(in srgb,var(--card-color) 10%,#142632);padding:6px 9px;border-radius:4px;color:var(--card-color);flex-shrink:0;min-height:32px}
+.aim-card>span{font-size:20px;line-height:1}.aim-card b{font-size:10px;font-weight:500;letter-spacing:1px}
+.targeting .system:not(.selectable){opacity:.23}
+.targeting .system.selectable .outer-orbit{opacity:.45;stroke:#e5c1a3}
+.targeting .system.selectable .orbit{stroke:#e8a09a;stroke-width:1.5;fill:#e7837f20}
+.targeting .system.strike-target .orbit{stroke:var(--strike);fill:#9cce8c26}
+.targeting .system.selectable:hover .orbit,.targeting .system.selectable:focus .orbit{stroke-width:3;filter:drop-shadow(0 0 9px #abc1a680)}
+@media(min-width:1600px){.starmap-wrap{left:238px;right:238px}}
+@media(min-width:951px) and (max-width:1200px){.starmap-wrap{left:186px;right:186px}.seating-label{left:19px}.seating-label.right-label{right:19px}.map-zone-heading{left:13px;right:13px}.map-zone-heading small{display:none}}
+@media(min-width:951px) and (max-height:800px){.seating-label{top:57px;font-size:9px}.starmap-wrap{top:58px;height:calc(100% - 158px)}.starmap-wrap #starmap{height:calc(100% - 48px);margin-top:27px}.map-zone-heading{top:10px}.map-zone-heading>span{font-size:9px}.map-zone-heading small{font-size:6px}#drop-label{font-size:8px;padding:3px 6px}.map-footer{font-size:6px!important}.target-bar p{font-size:10px}.target-bar small{font-size:7px}.aim-card{padding:5px 6px}.aim-card b{font-size:9px}}
+@media(min-width:701px) and (max-width:950px) and (min-height:601px){.starmap-wrap{left:165px;right:165px;top:81px;height:calc(100% - 199px)}.seating-label{top:83px;left:19px;font-size:9px}.seating-label.right-label{right:19px}.map-zone-heading small{display:none}.target-bar{gap:6px}.aim-card{padding:4px}.aim-card b{font-size:8px}.target-bar p{font-size:9px}.target-bar small{font-size:6px}}
+@media(max-width:700px) and (orientation:portrait){.table{height:clamp(425px,53dvh,470px)}.seating-label{left:16px;top:60px;font-size:8px;letter-spacing:1px}.seating-label small{font-size:7px;margin-left:6px}.seating-label.right-label{display:none}.opponent-roster{top:81px;height:66px}.opponent-roster .player{border-left-width:2px;background:linear-gradient(130deg,#27394c,#1b2a3b);border-color:#5b7286}.starmap-wrap{left:13px;right:13px;top:159px;height:calc(100% - 254px);border-radius:9px;box-shadow:inset 0 0 0 4px #162e3b}.starmap-wrap:after{inset:6px;border-radius:5px}.starmap-wrap #starmap{height:calc(100% - 43px);margin-top:25px}.map-zone-heading{left:11px;right:11px;top:9px}.map-zone-heading>span{font-size:9px;letter-spacing:1px}.map-zone-heading small{display:none}#drop-label{font-size:7px;letter-spacing:0;padding:3px 6px}.starmap-wrap .map-footer{font-size:5px!important;bottom:7px;left:10px;right:10px;letter-spacing:0}.target-bar{top:6px;width:calc(100% - 12px);padding:5px;gap:6px}.aim-card{gap:4px;padding:5px;min-height:29px}.aim-card>span{font-size:15px}.aim-card b{font-size:8px;letter-spacing:0}.target-bar p{font-size:9px}.target-bar small{font-size:6px}.target-bar button{font-size:8px;padding:6px}.hand-heading small{display:inline;font-size:7px}.hand-heading .category-legend{display:none}.card-is-dragging #status-message{color:#cfddc0}}
+@media(max-width:950px) and (orientation:landscape) and (max-height:600px){.seating-label{top:48px;left:13px;font-size:6px;letter-spacing:.7px}.seating-label small{font-size:5px}.seating-label.right-label{display:none}.opponent-roster{top:63px}.starmap-wrap{left:12px;right:12px;top:115px;height:121px;border-radius:7px;box-shadow:inset 0 0 0 3px #162e3b}.starmap-wrap:after{inset:5px}.starmap-wrap #starmap{height:calc(100% - 27px);margin-top:17px}.map-zone-heading{top:5px;left:8px;right:8px}.map-zone-heading>span{font-size:6px;letter-spacing:1px}.map-zone-heading small{font-size:5px;margin-left:5px}#drop-label{font-size:5px;padding:2px 4px}.starmap-wrap .map-footer{font-size:4px!important;bottom:4px;left:8px;right:8px}.target-bar{top:4px;padding:3px 5px;width:calc(100% - 10px);gap:6px}.aim-card{min-height:20px;padding:3px 5px}.aim-card>span{font-size:13px}.aim-card b{font-size:7px}.target-bar p{font-size:8px}.target-bar small{display:none}.target-bar button{font-size:7px;padding:4px 6px}.hand-heading small{display:inline;font-size:6px}.starmap-wrap.targeting #starmap{margin-top:27px;height:calc(100% - 36px)}}
+@media(prefers-reduced-motion:reduce){.drag-card{will-change:auto}.starmap-wrap{transition:none}}
+@media(max-width:950px) and (orientation:landscape) and (max-height:600px){.opponent-roster .player{flex-basis:98px}}
+
+/* Restore the original 900 × 430 star chart; give it room rather than flattening its coordinates. */
+.table-heading,.map-footer,#map-info-btn{display:none}
+.table{height:clamp(450px,calc(100dvh - 365px),580px);min-height:450px}
+.seating-label{top:22px}.opponents{top:49px;bottom:100px}
+.starmap-wrap{top:18px;height:calc(100% - 121px)}
+.starmap-wrap #starmap{height:calc(100% - 38px);margin-top:31px;overflow:visible}
+.latest-zone{bottom:10px;min-height:81px}
+.deck-area{left:25px;bottom:25px;gap:8px;display:flex;align-items:center}
+.deck-stack{width:24px!important;height:34px!important;border-radius:3px!important;transform:none!important}
+.deck-stack:before,.deck-stack:after{display:none}.deck-stack>span{font-size:17px!important}
+.deck-area b{font-size:16px}.deck-area small{font-size:8px}
+#hand .game-card.unavailable{--card-color:#8b9299!important;background:linear-gradient(160deg,#29313a,#1b2530);border-color:#59616a;box-shadow:none;cursor:default;color:#9ca4ad}
+#hand .game-card.unavailable .card-art{opacity:.36}
+#hand .game-card.unavailable .card-top,#hand .game-card.unavailable .card-face,#hand .game-card.unavailable .card-rule{opacity:.55}
+#hand .game-card.unavailable:hover{transform:none;border-color:#68717c;box-shadow:none}
+#hand .game-card.unavailable.selected{border-color:#d2dfba;box-shadow:0 0 0 2px #a8be86;transform:translateY(-9px)}
+#hand .game-card.response-eligible{border-color:#f4a6a0;background:linear-gradient(155deg,#58363d,#26303b);box-shadow:0 0 0 1px #e7837f55,0 0 24px #e7837f24}
+#hand .game-card.response-eligible .response-badge{display:block;width:max-content;max-width:100%;margin:4px 0 0 auto;padding:2px 6px;border-radius:4px;background:#efaaa2;color:#33252c;font-size:8px;line-height:1.35;white-space:nowrap}
+.player.responder-choice{border-color:#ec9992;box-shadow:0 0 0 1px #e7837f55,0 0 20px #e7837f22;cursor:pointer}
+.player.responder-choice .player-sub{color:#eeaaa4}
+.broadcast-bar{position:absolute;left:11px;right:11px;top:8px;display:flex;align-items:center;gap:9px;padding:4px 9px;background:#1b2b37f5;border:1px solid #b573746b;border-radius:5px;z-index:5;pointer-events:none}
+.broadcast-bar>span{color:var(--broadcast);font-size:24px}.broadcast-bar p{margin:0;font-size:11px;color:#e9b3ae;line-height:1.5}.broadcast-bar small{display:block;font-size:8px;color:#a9b5c0}
+.starmap-wrap:has(.broadcast-bar:not([hidden])) .map-zone-heading{visibility:hidden}
+.starmap-wrap:has(.broadcast-bar:not([hidden])) #starmap{margin-top:49px;height:calc(100% - 55px)}
+.hand-dock{position:relative}
+.handoff-cover{position:absolute;inset:12px 0 0;z-index:12;display:flex;gap:20px;align-items:center;justify-content:center;padding:24px;background:linear-gradient(120deg,#152434fa,#101c2bfa);border:1px solid #4e687c;border-radius:12px;box-shadow:0 12px 35px #0004}
+.handoff-icon{font-size:42px;color:#b0c395}.handoff-cover b{font-size:18px;color:#d9e4cf;letter-spacing:1px}.handoff-cover p{font-size:11px;color:#aebac5;margin:10px 0}.handoff-cover small{font-size:9px;color:#6f8799}.handoff-cover .primary-btn{padding:13px 18px;font-size:11px}
+.broadcast-bar[hidden],.handoff-cover[hidden],#discard-btn[hidden]{display:none}
+@media(min-width:701px) and (max-width:950px) and (min-height:601px){.table{height:470px}.starmap-wrap{top:18px;height:calc(100% - 121px)}.seating-label{top:23px}.opponents{top:48px;bottom:100px}}
+@media(max-width:700px) and (orientation:portrait){
+ .table{height:450px;min-height:450px}.seating-label{top:15px}.opponent-roster{top:34px;height:66px}
+ .starmap-wrap{top:110px;height:244px;left:12px;right:12px}.starmap-wrap #starmap{height:calc(100% - 30px);margin-top:26px}
+ .latest-zone{bottom:8px;min-height:80px;left:50%;width:calc(100% - 95px)}.deck-area{left:15px;bottom:26px;gap:4px}.deck-area b{font-size:13px}.deck-area small{font-size:6px}
+ .broadcast-bar{left:6px;right:6px;top:5px;padding:4px 6px;gap:6px}.broadcast-bar p{font-size:9px}.broadcast-bar small{font-size:7px}.broadcast-bar>span{font-size:20px}
+ .handoff-cover{inset:10px 0 0;padding:20px 14px;flex-wrap:wrap;gap:13px;text-align:center;align-content:center}.handoff-cover>div{flex-basis:78%}.handoff-icon{font-size:30px}.handoff-cover b{font-size:16px}.handoff-cover p{font-size:10px}.handoff-cover .primary-btn{width:100%}
+}
+@media(max-width:950px) and (orientation:landscape) and (max-height:600px){
+ .table{height:350px;min-height:350px}.hand-dock{height:350px}.seating-label{top:10px}.opponent-roster{top:26px;height:43px}
+ .starmap-wrap{top:79px;height:211px;left:10px;right:10px}.starmap-wrap #starmap{height:calc(100% - 26px);margin-top:22px}.map-zone-heading{top:6px}.map-zone-heading>span{font-size:8px}#drop-label{font-size:7px}
+ .latest-zone{bottom:4px;min-height:50px;width:calc(100% - 85px)}.latest-heading .eyebrow{display:none}.latest-content{min-height:35px}.played-mini{min-height:36px;height:36px}.played-mini strong{font-size:8px}.played-mini small,.played-mini em{font-size:6px}.deck-area{bottom:13px;left:13px;gap:4px}.deck-area b{font-size:12px}.deck-area small{font-size:6px}.deck-stack{width:20px!important;height:29px!important}
+ .broadcast-bar{top:4px;padding:3px 5px;gap:6px}.broadcast-bar p{font-size:8px}.broadcast-bar small{font-size:6px}.broadcast-bar>span{font-size:18px}.starmap-wrap:has(.broadcast-bar:not([hidden])) #starmap{margin-top:39px;height:calc(100% - 44px)}
+ .handoff-cover{inset:0 0 0 8px;flex-direction:column;padding:14px;gap:12px;text-align:center}.handoff-icon{font-size:28px}.handoff-cover b{font-size:14px}.handoff-cover p{font-size:9px;line-height:1.8}.handoff-cover .primary-btn{padding:10px;font-size:9px}
+}
+
+/* Keep the response badge inside the scrollable hand, clear of its clipped edge. */
+#hand .game-card.response-eligible .response-badge{font-size:7px;padding:2px 5px}
+@media(max-width:950px) and (orientation:landscape) and (max-height:600px){#hand .game-card.response-eligible .response-badge{font-size:6px;padding:1px 4px;margin-top:2px}}
+
+/* Mark incoming fire directly on the target system and name the strike beneath it. */
+.flying-card{will-change:transform,opacity,filter;backface-visibility:hidden}
+.system.incoming-strike-target .orbit{stroke:#ff7772;stroke-width:2;fill:#e44b4722}
+.system .incoming-strike-ring{fill:#e94c4a12;stroke:#ff625e;stroke-width:2;filter:drop-shadow(0 0 4px #ff534c77);pointer-events:none;animation:incoming-ring-pulse 1.15s ease-in-out infinite}
+.incoming-strike-name{fill:#ffc0b7;stroke:#10202b;stroke-width:3px;paint-order:stroke;stroke-linejoin:round;font-size:10px;font-weight:700;text-anchor:middle;pointer-events:none}
+@keyframes incoming-ring-pulse{50%{stroke-width:3;fill:#e94c4a2c}}
+@media(max-width:700px) and (orientation:portrait){.incoming-strike-name{font-size:11px}}
+@media(max-width:950px) and (orientation:landscape) and (max-height:600px){.incoming-strike-name{font-size:9px}}
+@media(prefers-reduced-motion:reduce){.system .incoming-strike-ring{animation:none}}
+@media(max-width:950px) and (orientation:landscape) and (max-height:600px){
+ .table{height:clamp(290px,calc(100dvh - 94px),350px);min-height:290px}.hand-dock{height:clamp(290px,calc(100dvh - 94px),350px)}
+ .seating-label{display:none}.opponent-roster{top:12px;height:35px}.opponent-roster .player{padding-top:5px;padding-bottom:5px}.starmap-wrap{top:55px;height:calc(100% - 111px)}
+}
+@media(max-width:950px) and (orientation:landscape) and (max-height:600px){.opponent-roster{top:9px;height:43px}.starmap-wrap{top:60px;height:calc(100% - 116px)}}

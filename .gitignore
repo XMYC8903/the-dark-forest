@@ -1,0 +1,9 @@
+node_modules/
+.pnpm-store/
+.wrangler/
+.openai/
+artifacts/
+.sites-runtime/
+*.log
+.dev.vars
+.secrets/

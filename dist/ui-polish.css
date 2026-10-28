@@ -1,0 +1,270 @@
+/* Shared visual rhythm for the portal, game table, social views, and spectator desk. */
+:root {
+  --ui-border: #30424f;
+  --ui-border-strong: #465d69;
+  --ui-surface: #111d28;
+  --ui-surface-raised: #172632;
+  --ui-text: #e2e9e7;
+  --ui-muted: #84949e;
+  --ui-radius-panel: 13px;
+  --ui-radius-control: 8px;
+}
+
+.portal {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.spectator-app {
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+.portal-header,
+.portal-footer {
+  flex: 0 0 auto;
+}
+
+.portal-layout {
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+.portal-layout.compact > .portal-panel {
+  width: min(470px, 100%);
+  max-width: 470px;
+  justify-self: end;
+}
+
+.portal-layout.wide .portal-scene {
+  min-height: 0;
+  align-self: start;
+  justify-content: flex-start;
+  padding-block: clamp(16px, 3vh, 38px);
+}
+
+.portal-layout.wide .portal-scene h1 {
+  max-width: 13ch;
+  font-size: clamp(28px, 3.2vw, 46px);
+  letter-spacing: .08em;
+  line-height: 1.34;
+}
+
+.portal-layout.wide .portal-scene p {
+  max-width: 30ch;
+}
+
+.portal-panel {
+  min-width: 0;
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-panel);
+  padding: clamp(20px, 2vw, 30px);
+}
+
+.portal-panel h2 {
+  line-height: 1.4;
+  letter-spacing: .08em;
+}
+
+.portal-panel p {
+  line-height: 1.75;
+}
+
+.portal .menu-action,
+.portal .primary-btn,
+.portal .secondary-btn,
+.portal .room-watch,
+.observer-exit,
+.friend-action {
+  border-radius: var(--ui-radius-control);
+}
+
+.portal .menu-action {
+  min-height: 64px;
+}
+
+.portal .primary-btn,
+.portal .secondary-btn,
+.portal .room-watch,
+.observer-exit,
+.friend-action {
+  min-height: 38px;
+}
+
+.portal-field input,
+.friends-page .friend-search input,
+#social-dialog input {
+  min-height: 42px;
+  border-color: #3c505e;
+  border-radius: var(--ui-radius-control);
+}
+
+.room-entry,
+.watch-seat,
+.room-seat,
+.friend-search-result,
+.observer-map-panel,
+.observer-player-list,
+.observer-hands,
+.observer-strike-ledger,
+.observer-action-log,
+.observer-waiting {
+  border-radius: var(--ui-radius-panel);
+}
+
+.room-seat.empty,
+.room-entry,
+.friend-search-result {
+  border-color: var(--ui-border);
+}
+
+.room-seat.seat-add:hover,
+.room-entry:hover,
+.friend-search-result:hover {
+  border-color: var(--ui-border-strong);
+}
+
+.social-row {
+  gap: 12px;
+  padding-block: 14px;
+}
+
+.friend-action {
+  padding-inline: 13px;
+  line-height: 1.25;
+}
+
+#social-dialog {
+  border-color: var(--ui-border-strong);
+  border-radius: 15px;
+}
+
+#social-dialog .social-close {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 8px;
+}
+
+#social-dialog .social-close:hover {
+  background: #ffffff0a;
+  color: var(--ui-text);
+}
+
+.observer-dashboard,
+.observer-hands,
+.observer-bottom-grid,
+.observer-waiting {
+  gap: clamp(10px, 1.2vw, 16px);
+}
+
+.observer-map-panel,
+.observer-player-list,
+.observer-hands,
+.observer-strike-ledger,
+.observer-action-log,
+.observer-waiting {
+  border-color: var(--ui-border);
+}
+
+.observer-player.player,
+.observer-hand-player,
+.observer-card,
+.observer-action-cards > span {
+  border-radius: var(--ui-radius-control);
+}
+
+.table,
+.starmap-wrap {
+  border-color: var(--ui-border);
+}
+
+@media (max-width: 850px) {
+  .portal {
+    padding-block: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-bottom));
+    padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
+  }
+
+  .portal-layout,
+  .portal-layout.wide {
+    flex: 1 0 auto;
+    gap: 16px;
+    padding-block: 24px;
+  }
+
+  .portal-layout.compact > .portal-panel {
+    max-width: 470px;
+    justify-self: center;
+  }
+
+  .portal-layout.wide .portal-scene {
+    padding-block: 0;
+  }
+
+  .portal-panel {
+    padding: 20px;
+  }
+
+  .room-seats {
+    gap: 9px;
+  }
+
+  .room-seat {
+    min-height: 70px;
+  }
+
+  .observer-dashboard,
+  .observer-bottom-grid {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .portal {
+    padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right));
+  }
+
+  .portal-panel {
+    padding: 17px;
+  }
+
+  .room-seat {
+    gap: 7px;
+    padding-inline: 8px;
+  }
+
+  .seat-mark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .social-row {
+    gap: 7px;
+  }
+
+  .friend-action {
+    padding-inline: 9px;
+    font-size: 10px;
+  }
+}
+
+@media (max-height: 550px) and (orientation: landscape) {
+  .portal-layout.wide .portal-scene {
+    padding-block: 8px;
+  }
+
+  .portal-layout.wide .portal-scene h1 {
+    font-size: clamp(24px, 3vw, 34px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal .menu-action:hover {
+    transform: none;
+  }
+}

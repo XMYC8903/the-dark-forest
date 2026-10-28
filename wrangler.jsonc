@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dark-forest-cardgame",
+  "main": "server/worker.js",
+  "compatibility_date": "2026-10-24",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "routes": [
+    {"pattern": "xmyc.dpdns.org", "custom_domain": true}
+  ],
+  "durable_objects": {
+    "bindings": [
+      {"name": "ROOMS", "class_name": "GameRoom"},
+      {"name": "LOBBY", "class_name": "RoomDirectory"},
+      {"name": "ACCOUNTS", "class_name": "AccountHub"}
+    ]
+  },
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["GameRoom", "RoomDirectory"]},{"tag":"v2-accounts","new_sqlite_classes":["AccountHub"]}],
+  "observability": {"enabled": true}
+}

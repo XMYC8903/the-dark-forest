@@ -1,0 +1,374 @@
+/* Layout follows the space the browser currently exposes. */
+:root {
+  --table-viewport: 100vh;
+  --page-gutter: clamp(16px, 2.5vw, 48px);
+  --seat-width: clamp(154px, 12vw, 230px);
+}
+@supports (height: 100dvh) {
+  :root { --table-viewport: 100dvh; }
+}
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { min-width: 0; }
+.app { width: 100%; max-width: 1920px; }
+main { min-width: 0; padding-inline: var(--page-gutter); }
+.topbar { margin-inline: var(--page-gutter); }
+.hand-center, .self-panel, .actions-panel, .latest-content { min-width: 0; }
+.starmap-wrap #starmap { display: block; }
+.player-name, .player-top { min-width: 0; }
+.player-strikes { max-height: 46px; overflow-y: auto; }
+.target-bar p { min-width: 0; white-space: normal; }
+.latest-content .played-mini { flex: 0 0 108px; width: 108px; min-width: 108px; }
+.dialog { max-height: calc(var(--table-viewport) - 32px); }
+.overlay { padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+.toast { top: max(64px, env(safe-area-inset-top)); }
+.portal { min-height: 100dvh; }
+
+/* Desktop: seats flank the map; the hand always reserves four equal card widths. */
+@media (min-width: 1001px) {
+  .topbar { height: clamp(50px, 7vh, 68px); }
+  .room-toolbar { height: clamp(42px, 6vh, 56px); }
+  .table { float: none; width: 100%; height: clamp(360px, calc(var(--table-viewport) - 435px), 620px); min-height: 360px; margin: 0; }
+  .seating-label { top: 17px; left: 18px; font-size: 9px; letter-spacing: 1px; }
+  .seating-label.right-label { left: auto; right: 18px; }
+  .opponent-roster { display: contents; }
+  .opponents { top: 42px; bottom: 64px; width: var(--seat-width); gap: 8px; justify-content: space-evenly; overflow-y: auto; scrollbar-width: thin; }
+  .opponents.left { left: 16px; }
+  .opponents.right { right: 16px; }
+  .opponents .player, .opponents:has(.player:nth-child(3)) .player { min-height: 68px; padding: 7px 8px; }
+  .player-top { gap: 5px; }
+  .player-top .avatar { width: 24px; height: 26px; }
+  .player-name { font-size: 11px; letter-spacing: 0; }
+  .player-sub { font-size: 7px; letter-spacing: 0; }
+  .player-counters { gap: 5px; }
+  .player-counters .player-energy { font-size: 12px; }
+  .player-counters .public-hand-count { font-size: 10px; }
+  .public-assets { margin-top: 5px; gap: 3px; }
+  .public-assets .building-stat { min-height: 20px; padding: 2px 4px; font-size: 9px; }
+  .public-assets .building-stat b { font-size: 10px; }
+  .starmap-wrap { left: calc(var(--seat-width) + 30px); right: calc(var(--seat-width) + 30px); top: 16px; bottom: 130px; height: auto; }
+  .starmap-wrap #starmap { width: 100%; height: calc(100% - 36px); margin-top: 28px; }
+  .map-zone-heading { top: 10px; left: 14px; right: 14px; }
+  .map-zone-heading > span { font-size: 10px; }
+  #drop-label { font-size: 8px; }
+  .latest-zone { left: calc(var(--seat-width) + 30px); right: calc(var(--seat-width) + 30px); bottom: 8px; width: auto; min-height: 98px; }
+  .latest-content { min-height: 86px; }
+  .deck-area { left: 20px; bottom: 18px; }
+  .hand-dock { display: grid; grid-template-columns: clamp(160px, 16vw, 220px) minmax(0, 1fr) clamp(140px, 13vw, 180px); gap: clamp(12px, 1.5vw, 24px); width: 100%; height: auto; min-height: 0; padding: 14px 0 0; }
+  .hand-center { width: 100%; max-width: clamp(640px, 85vh, 800px); justify-self: center; }
+  .self-panel { padding: 10px 0; }
+  .self-energy { flex-wrap: wrap; gap: 5px; }
+  .self-energy b { font-size: 29px; }
+  .self-energy .self-hand-counter b { font-size: 15px !important; }
+  .self-assets { gap: 4px; }
+  .actions-panel { padding-top: 8px; }
+  .actions-panel button { min-height: 42px; }
+  .hand-heading { margin: 0 0 8px; min-height: 18px; }
+  .hand-heading small { font-size: 8px; }
+  #hand { gap: 12px; min-height: 0; margin: 0; padding: 8px 5px 12px; }
+  #hand .game-card { flex: 0 0 calc(25% - 9px); min-width: 120px; width: auto; height: clamp(178px, 25vh, 228px); padding: 9px; }
+  #hand .card-art { height: clamp(26px, 4vh, 42px); margin: 5px 0 3px; }
+  #hand .card-name { font-size: 14px; line-height: 1.4; }
+  #hand .card-face { font-size: 8px; }
+  #hand .card-rule { font-size: 8px; line-height: 1.4; padding-top: 5px; margin-top: 5px; }
+  #hand .hand-card-detail { font-size: 8px; line-height: 1.5; margin-top: 5px; }
+  .bottom-bar { min-height: 32px; margin-top: 0; padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* Phones and narrow tablets: a scrollable opponent rail, full-width map, then hand. */
+@media (max-width: 1000px) {
+  :root { --page-gutter: clamp(10px, 2.6vw, 24px); }
+  .topbar { height: 60px; gap: 10px; padding-top: env(safe-area-inset-top); }
+  .brand { gap: 9px; }
+  .brand-mark { width: 29px; height: 29px; font-size: 20px; }
+  .brand-mark:after { inset: 9px -5px; }
+  .brand b { font-size: 16px; letter-spacing: 3px; }
+  .brand small { font-size: 6px; letter-spacing: 2px; }
+  .top-status { display: none; }
+  .topbar nav { gap: 12px; }
+  .quiet-btn { min-height: 36px; padding: 8px 10px; font-size: 11px; }
+  .nav-label { display: none; }
+  .room-toolbar { height: 48px; gap: 6px; }
+  .room-title { min-width: 0; gap: 7px; }
+  .room-title h1 { font-size: 13px; letter-spacing: 1px; }
+  .section-index, .pill { font-size: 8px; letter-spacing: 0; }
+  .round-info { font-size: 9px; gap: 8px; letter-spacing: 0; white-space: nowrap; }
+  .toolbar-divider { display: none; }
+  .table { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; float: none; width: 100%; height: auto; min-height: 0; padding: 12px; margin: 0; }
+  .seating-label { position: static; display: block; font-size: 9px; letter-spacing: 1px; }
+  .seating-label.right-label { display: none; }
+  .opponent-roster { position: static; display: flex; height: 100px; gap: 8px; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; scrollbar-width: thin; }
+  .opponent-roster .opponents { display: contents !important; }
+  .opponent-roster .player { flex: 0 0 164px; width: 164px; min-width: 164px; min-height: 80px; max-width: none; padding: 8px; border-radius: 7px; overflow-y: auto; scrollbar-width: thin; }
+  .player-top { gap: 5px; }
+  .player-top .avatar { width: 24px; height: 26px; }
+  .player-name { font-size: 11px; letter-spacing: 0; }
+  .player-sub { font-size: 7px; letter-spacing: 0; }
+  .player-counters { gap: 5px; }
+  .player-counters .player-energy { font-size: 12px; }
+  .player-counters .public-hand-count { font-size: 10px; }
+  .public-assets { margin-top: 6px; gap: 4px; }
+  .public-assets .building-stat { min-height: 20px; padding: 2px 4px; }
+  .starmap-wrap { position: relative; display: flex; flex-direction: column; left: auto; right: auto; top: auto; bottom: auto; width: 100%; height: auto; min-height: 0; border-radius: 9px; }
+  .starmap-wrap #starmap { flex: none; width: 100%; height: auto; aspect-ratio: 900 / 430; margin: 30px 0 8px; }
+  .starmap-wrap.targeting #starmap, .starmap-wrap:has(.broadcast-bar:not([hidden])) #starmap { margin-top: 58px; height: auto; }
+  .map-zone-heading { left: 10px; right: 10px; top: 9px; }
+  .map-zone-heading > span { font-size: 9px; letter-spacing: 1px; }
+  .map-zone-heading small { display: none; }
+  #drop-label { font-size: 8px; letter-spacing: 0; padding: 3px 5px; }
+  .system .system-name { font-size: 26px; letter-spacing: 0; }
+  .system .system-id { font-size: 28px; }
+  .system .you-label { font-size: 22px; }
+  .latest-zone { position: relative; left: auto; right: auto; bottom: auto; width: calc(100% - 46px); min-height: 0; margin-left: 46px; transform: none; }
+  .latest-heading { margin-bottom: 6px; }
+  .latest-heading .eyebrow { display: none; }
+  .latest-heading #latest-label { font-size: 9px; }
+  .latest-content { min-height: 94px; gap: 7px; }
+  .latest-content .played-mini { flex: 0 0 108px; min-width: 108px; height: 88px; min-height: 88px; padding: 6px; gap: 4px; }
+  .latest-content .mini-name > strong { font-size: 10px; }
+  .latest-content .played-mini > small, .mini-owner > b { font-size: 8px; }
+  .latest-content .mini-owner > em, .mini-target { font-size: 7px; }
+  .deck-area { left: 14px; bottom: 32px; display: flex; flex-direction: column; gap: 7px; }
+  .deck-area > div + div { display: flex; align-items: center; gap: 3px; margin: 0; }
+  .deck-area b { font-size: 13px; }
+  .deck-area small { font-size: 7px; }
+  .hand-dock { float: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; width: 100%; height: auto; min-height: 0; padding: 12px 0 0; }
+  .self-panel { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px 10px; }
+  .self-ident b { font-size: 12px; }
+  .self-ident > div > span { font-size: 9px; }
+  .self-energy { display: flex; flex-wrap: wrap; margin: 0; gap: 5px; }
+  .self-energy b { font-size: 27px; }
+  .self-energy small { font-size: 8px; }
+  .self-hand-counter { margin-left: 5px; }
+  .self-hand-counter b { font-size: 14px !important; }
+  .self-assets { flex-basis: 100%; margin-top: 0; min-height: 0; }
+  .privacy-note { display: none; }
+  .hand-heading { margin: 0 3px 6px; min-height: 20px; font-size: 10px; }
+  .hand-heading small { display: inline; font-size: 8px; }
+  .category-legend { display: none; }
+  #hand { gap: 8px; min-height: 0; padding: 8px 5px 14px; margin: 0; }
+  #hand .game-card { flex: 0 0 clamp(116px, calc(25% - 6px), 170px); min-width: 0; width: auto; height: 212px; padding: 9px; }
+  #hand .card-art { height: 36px; margin: 5px 0 3px; }
+  #hand .card-top { font-size: 7px; letter-spacing: 0; }
+  #hand .card-cost { font-size: 15px; }
+  #hand .card-name { font-size: 13px; line-height: 1.4; letter-spacing: 0; }
+  #hand .card-face { font-size: 8px; letter-spacing: 1px; }
+  #hand .card-rule { margin-top: 6px; padding-top: 6px; font-size: 8px; line-height: 1.5; }
+  #hand .hand-card-detail { margin-top: 6px; font-size: 9px; line-height: 1.5; }
+  .actions-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; padding: 2px 2px 12px; }
+  .turn-badge { grid-column: 1 / -1; margin: 0; font-size: 10px; }
+  .actions-panel p { display: none; }
+  .actions-panel button { min-height: 44px; margin: 0; font-size: 12px; }
+  .bottom-bar { clear: both; margin: 0; min-height: 40px; padding: 4px 2px max(8px, env(safe-area-inset-bottom)); font-size: 8px; gap: 8px; }
+  #status-message { font-size: 8px; line-height: 1.5; }
+  .bottom-bar button { font-size: 9px; }
+  .target-bar { top: 6px; width: calc(100% - 12px); padding: 6px; gap: 6px; }
+  .aim-card { padding: 5px; min-height: 30px; }
+  .aim-card b { font-size: 9px; letter-spacing: 0; }
+  .aim-card > span { font-size: 16px; }
+  .target-bar p { font-size: 10px; line-height: 1.3; }
+  .target-bar small { font-size: 8px; }
+  .target-bar button { padding: 8px; min-height: 36px; font-size: 10px; }
+  .broadcast-bar { top: 6px; left: 6px; right: 6px; padding: 6px; }
+  .broadcast-bar p { font-size: 10px; }
+  .broadcast-bar small { font-size: 8px; }
+  .handoff-cover { inset: 8px 0 0; padding: 18px 12px; }
+}
+
+/* Landscape phone: map on the left, hand and both actions on the right. */
+@media (max-width: 1000px) and (max-height: 600px) and (orientation: landscape) {
+  :root { --page-gutter: max(12px, env(safe-area-inset-left), env(safe-area-inset-right)); }
+  .topbar { height: 44px; padding: 0; }
+  .brand b { font-size: 14px; }
+  .brand-mark { width: 25px; height: 25px; font-size: 18px; }
+  .brand-mark:after { inset: 8px -4px; }
+  .quiet-btn { min-height: 32px; padding: 6px 10px; font-size: 10px; }
+  main { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(240px, 1fr); align-items: start; column-gap: 12px; }
+  .room-toolbar, .bottom-bar { grid-column: 1 / -1; }
+  .room-toolbar { height: 36px; }
+  .room-title h1 { font-size: 12px; }
+  .table { display: block; height: max(380px, calc(var(--table-viewport) - 88px)); min-height: 380px; padding: 0; }
+  .seating-label { position: absolute; top: 8px; left: 12px; font-size: 8px; }
+  .opponent-roster { position: absolute; left: 10px; right: 10px; top: 25px; height: 72px; gap: 6px; }
+  .opponent-roster .player { flex: 0 0 150px; min-width: 150px; width: 150px; min-height: 58px; padding: 5px 7px; }
+  .player-top .avatar { width: 22px; height: 23px; }
+  .player-name { font-size: 10px; }
+  .public-assets { margin-top: 4px; }
+  .public-assets .building-stat { min-height: 18px; padding: 2px 4px; }
+  .starmap-wrap { position: absolute; display: block; left: 10px; right: 10px; top: 106px; bottom: 116px; width: auto; height: auto; }
+  .starmap-wrap #starmap { width: 100%; height: calc(100% - 29px); aspect-ratio: auto; margin: 25px 0 0; }
+  .starmap-wrap.targeting #starmap, .starmap-wrap:has(.broadcast-bar:not([hidden])) #starmap { margin-top: 45px; height: calc(100% - 49px); }
+  .map-zone-heading { top: 7px; }
+  .latest-zone { position: absolute; left: 57px; right: 10px; bottom: 6px; width: auto; margin: 0; }
+  .latest-content { min-height: 78px; }
+  .latest-content .played-mini { height: 70px; min-height: 70px; padding: 5px; gap: 3px; }
+  .latest-heading { margin-bottom: 4px; }
+  .deck-area { left: 13px; bottom: 28px; }
+  .hand-dock { min-height: 380px; padding: 0; align-content: start; }
+  .self-panel { padding-bottom: 6px; gap: 4px; }
+  .self-avatar { width: 26px; height: 26px; }
+  .self-ident b { font-size: 10px; }
+  .self-ident > div > span { font-size: 8px; }
+  .self-energy b { font-size: 23px; }
+  .income { display: none; }
+  .self-assets .building-stat { min-height: 20px; font-size: 9px; }
+  .hand-heading { min-height: 18px; margin-bottom: 3px; font-size: 9px; }
+  .hand-heading small { display: none; }
+  #hand { gap: 7px; padding: 6px 4px 10px; }
+  #hand .game-card { flex: 0 0 112px; height: 184px; padding: 8px; }
+  #hand .card-art { height: 26px; margin: 4px 0 2px; }
+  #hand .card-name { font-size: 12px; }
+  #hand .card-face { font-size: 7px; }
+  #hand .card-rule { margin-top: 5px; padding-top: 5px; font-size: 8px; }
+  #hand .hand-card-detail { font-size: 8px; margin-top: 5px; }
+  .actions-panel { gap: 6px; padding: 2px 2px 6px; }
+  .actions-panel button { min-height: 40px; font-size: 11px; }
+  .turn-badge { font-size: 9px; }
+  .bottom-bar { min-height: 30px; padding-top: 4px; }
+  .target-bar { top: 4px; padding: 4px; }
+  .aim-card { min-height: 28px; padding: 3px 4px; }
+  .aim-card b { font-size: 8px; }
+  .target-bar p { font-size: 9px; }
+  .target-bar small { display: none; }
+  .target-bar button { min-height: 30px; padding: 5px; font-size: 9px; }
+  .handoff-cover { inset: 0; }
+}
+
+@media (pointer: coarse) {
+  /* Sideways swipes scroll the hand; upward movement still drags a card to the map. */
+  #hand .game-card { touch-action: pan-x; }
+  .opponent-roster, .latest-content { -webkit-overflow-scrolling: touch; }
+}
+
+/* Desktop proportions respond to the actual window height, including browser chrome. */
+@media (min-width: 1001px) and (min-height: 620px) {
+  .app { height: 100dvh; min-height: 0; display: flex; flex-direction: column; }
+  .topbar { flex: 0 0 clamp(50px, 7dvh, 68px); }
+  main { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .room-toolbar { flex: 0 0 clamp(40px, 6dvh, 56px); }
+  .table { flex: 1 1 0; height: auto; min-height: clamp(270px, 32dvh, 360px); }
+  .hand-dock { flex: 0 0 auto; min-height: 0; padding-top: clamp(6px, 1.2dvh, 14px); }
+  #hand { min-height: 0; }
+  #hand .game-card { height: clamp(145px, 23dvh, 220px); }
+  .bottom-bar { flex: 0 0 auto; }
+}
+
+/* In a phone held sideways, the map and hand share one screen-height row. */
+@media (max-width: 1000px) and (max-height: 600px) and (orientation: landscape) {
+  .app { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .topbar { flex: 0 0 44px; }
+  main {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(240px, 1fr);
+    grid-template-rows: 36px minmax(0, 1fr) 30px;
+    align-items: stretch;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .room-toolbar { grid-column: 1 / -1; grid-row: 1; height: 36px; min-height: 0; }
+  .table { grid-column: 1; grid-row: 2; height: auto; min-height: 0; }
+  .hand-dock { grid-column: 2; grid-row: 2; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .bottom-bar { grid-column: 1 / -1; grid-row: 3; min-height: 0; }
+}
+
+@media (max-height: 619px) and (orientation: landscape) {
+  .portal, .app { min-height: 100dvh; }
+}
+
+/* Give the play area, player seats and four-card hand room to grow together. */
+@media (min-width: 1001px) {
+  .hand-center { max-width: clamp(640px, 42vw, 840px); }
+  #hand .game-card { height: clamp(170px, 27dvh, 250px); }
+  .opponents .player { min-height: clamp(68px, 9dvh, 96px); padding: clamp(7px, .6vw, 12px); }
+  .player-name { font-size: clamp(11px, .65vw, 14px); }
+  .player-sub { font-size: clamp(7px, .42vw, 9px); }
+  .player-top .avatar { width: clamp(24px, 1.4vw, 32px); height: clamp(25px, 1.5vw, 34px); }
+  .player-counters .player-energy { font-size: clamp(12px, .68vw, 15px); }
+  .player-counters .public-hand-count { font-size: clamp(10px, .55vw, 12px); }
+}
+
+
+/* A brief arrival sequence gives players a visual cue before the board settles. */
+.table-entry { 
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #dce8cd;
+  background: radial-gradient(ellipse at center, #172631f2 0%, #090f18f7 62%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .34s ease;
+}
+.table-entry[hidden] { display: none; }
+.table-entry:not(.leaving) { animation: entry-screen-in .48s ease both; }
+.table-entry.leaving { animation: entry-screen-out .34s ease both; }
+.entry-orbit { position: relative; width: 84px; height: 84px; display: grid; place-items: center; border: 1px solid #c5d9a45c; border-radius: 50%; animation: orbit-arrive 1.2s ease-in-out infinite; }
+.entry-orbit:before, .entry-orbit:after { content: ''; position: absolute; inset: 13px -9px; border: 1px solid #91b5a84a; border-radius: 50%; transform: rotate(35deg); }
+.entry-orbit:after { inset: 22px -16px; transform: rotate(-35deg); }
+.entry-orbit b { font-size: 30px; color: #d8e5c1; text-shadow: 0 0 24px #bedc9d88; }
+.entry-orbit i { position: absolute; top: -3px; left: 50%; width: 6px; height: 6px; border-radius: 50%; background: #e4efcb; box-shadow: 0 0 13px #d9eeb4; }
+.table-entry strong { font-size: 14px; font-weight: 500; letter-spacing: 2px; }
+.table-entry small { color: #82949d; font-size: 10px; }
+.app.table-arriving .topbar { animation: board-part-in .45s ease both; }
+.app.table-arriving .room-toolbar { animation: board-part-in .5s .06s ease both; }
+.app.table-arriving .table { animation: board-part-in .58s .1s ease both; }
+.app.table-arriving .opponents .player { animation: seat-part-in .42s .2s both; }
+.app.table-arriving .opponents .player:nth-child(2) { animation-delay: .28s; }
+.app.table-arriving .opponents .player:nth-child(3) { animation-delay: .36s; }
+.app.table-arriving .latest-zone { animation: board-part-in .45s .22s ease both; }
+.app.table-arriving .self-panel { animation: board-part-in .45s .2s ease both; }
+.app.table-arriving .hand-center { animation: board-part-in .5s .27s ease both; }
+.app.table-arriving .actions-panel { animation: board-part-in .45s .34s ease both; }
+.app.table-arriving .bottom-bar { animation: board-part-in .4s .38s ease both; }
+@keyframes entry-screen-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes entry-screen-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes orbit-arrive { 50% { transform: rotate(22deg) scale(1.06); filter: brightness(1.3); } }
+@keyframes board-part-in { from { opacity: 0; filter: blur(5px); transform: translateY(9px); } to { opacity: 1; filter: blur(0); transform: translateY(0); } }
+@keyframes seat-part-in { from { opacity: 0; transform: translateX(-9px) scale(.97); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .table-entry, .entry-orbit, .app.table-arriving *, .app.table-arriving *:before, .app.table-arriving *:after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* Keep public plays compact without introducing a second scroll area. */
+@media (min-width: 1001px) {
+  .latest-content { overflow: hidden; flex-wrap: wrap; align-content: flex-start; scrollbar-width: none; }
+  .latest-content::-webkit-scrollbar { display: none; }
+  .latest-content .played-mini { flex: 1 1 94px; width: auto; min-width: 76px; max-width: 128px; }
+}
+
+@media (max-width: 1000px) {
+  .latest-content { display: flex; min-width: 0; height: auto; max-height: none; overflow: hidden; flex-wrap: wrap; align-content: flex-start; scrollbar-width: none; }
+  .latest-content::-webkit-scrollbar { display: none; }
+  .latest-content .played-mini { flex: 1 1 calc((100% - 12px) / 3); width: auto; min-width: 0; max-width: none; }
+}
+
+/* Give the map a guaranteed column on landscape phones. */
+@media (min-width: 701px) and (max-width: 1000px) and (max-height: 600px) and (orientation: landscape) {
+  main { grid-template-columns: minmax(320px, 1.45fr) minmax(240px, 1fr); }
+  .table, .starmap-wrap, #starmap { min-width: 0; }
+  .starmap-wrap { bottom: 134px; height: auto; }
+  .latest-zone { height: 122px; min-height: 0; }
+  .latest-heading { margin-bottom: 3px; }
+  .latest-content { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 52px; gap: 4px; height: 108px; min-height: 0; padding: 0; }
+  .latest-content .played-mini { width: auto; min-width: 0; max-width: none; height: 50px; min-height: 50px; padding: 4px; gap: 2px; }
+}
+
+/* Below this width, stack map and hand so neither becomes a narrow strip. */
+@media (max-width: 700px) and (max-height: 600px) and (orientation: landscape) {
+  .app { height: auto; min-height: 100dvh; overflow: visible; }
+  main { flex: none; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 36px 340px auto 30px; min-height: 0; overflow: visible; row-gap: 8px; }
+  .room-toolbar { grid-column: 1; grid-row: 1; }
+  .table { grid-column: 1; grid-row: 2; height: 340px; min-height: 340px; }
+  .hand-dock { grid-column: 1; grid-row: 3; display: grid; grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; overflow: visible; padding-top: 8px; }
+  .bottom-bar { grid-column: 1; grid-row: 4; }
+  .starmap-wrap { bottom: 134px; height: auto; }
+  .latest-zone { height: 122px; min-height: 0; }
+  .latest-heading { margin-bottom: 3px; }
+  .latest-content { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 52px; gap: 4px; height: 108px; min-height: 0; padding: 0; }
+  .latest-content .played-mini { width: auto; min-width: 0; max-width: none; height: 50px; min-height: 50px; padding: 4px; gap: 2px; }
+}

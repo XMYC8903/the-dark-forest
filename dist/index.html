@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090f18">
+  <meta name="description" content="黑暗森林卡牌桌游交互预览。探索星图、逐张出牌，体验广播、建设与打击。支持手机竖屏、横屏和电脑。">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=20261028-forest-mark1">
+  <title>黑暗森林 · 星海牌桌</title>
+  <link rel="stylesheet" href="./style.css?v=20261024-response-feedback">
+  <link rel="stylesheet" href="./interaction.css?v=20261024-response-feedback">
+  <link rel="stylesheet" href="./presentation.css?v=20261024-lock-hold">
+  <link rel="stylesheet" href="./responsive.css?v=20261024-response-feedback">
+  <link rel="stylesheet" href="./lobby.css?v=20261028-replay-save2">
+  <link rel="stylesheet" href="./spectator.css?v=20261028-replay-controls1">
+  <link rel="stylesheet" href="./social.css?v=20261027-replays1">
+  <link rel="stylesheet" href="./ui-polish.css?v=20261027-menu-panel-width">
+</head>
+<body>
+  <section id="portal" class="portal" aria-label="黑暗森林主菜单"></section>
+  <section id="spectator-app" class="spectator-app" hidden aria-label="全知观战视图"></section>
+  <div id="table-entry" class="table-entry" hidden aria-live="polite"><span class="entry-orbit"><i></i><b>◉</b></span><strong>文明正在进入星海</strong><small>正在排列星系与文明席位</small></div>
+  <div class="app" hidden>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="黑暗森林首页"><span class="brand-mark">◉</span><span><b>黑暗森林</b><small>THE DARK FOREST</small></span></a>
+      <div class="top-status"><span class="live-dot"></span>本地交互预览<span class="status-separator"></span><span class="muted">尚未接入联机</span></div>
+      <nav><button id="exit-btn" class="quiet-btn exit-btn" hidden>退出对局</button><button id="menu-btn" class="quiet-btn">主菜单</button><button id="rules-btn" class="icon-btn" title="查看规则"><span>?</span><span class="nav-label">规则</span></button><button id="new-btn" class="quiet-btn">新对局 <span>↗</span></button></nav>
+    </header>
+    <main>
+      <div class="room-toolbar"><div class="room-title"><span class="section-index">01 /</span><h1>星海试验场</h1><span class="pill" id="scene-tag">演示局面</span></div><div class="round-info"><span id="round-label">第 03 轮</span><span class="toolbar-divider"></span><b id="turn-label">你的回合</b><span class="tiny-dot"></span></div></div>
+      <section class="table" aria-label="星图牌桌">
+        <div class="table-grid"></div><div class="cosmic-glow"></div>
+        <div class="table-heading"><div><span class="eyebrow">THE UNIVERSE IS A DARK FOREST</span><p>藏好自己，做好清理。</p></div><span class="map-key"><i></i> 你的星系 <span>·</span> 其他文明坐标未知</span></div>
+        <div class="seating-label">对手文明 <small>坐标隐藏</small></div><div class="seating-label right-label">对手文明</div>
+        <div class="opponent-roster" aria-label="其他文明，可横向滑动查看"><aside class="opponents left" id="left-players" aria-label="左侧文明"></aside><aside class="opponents right" id="right-players" aria-label="右侧文明"></aside></div>
+        <div class="starmap-wrap" id="map-drop-zone" aria-label="星系地图，拖入手牌出牌"><div class="map-zone-heading"><span>星系地图 <small>STAR MAP</small></span><b id="drop-label">拖牌到此出牌 ↗</b></div><svg id="starmap" viewBox="0 0 900 430" role="group" aria-label="九个星系，点击星系查看信息或选择目标"></svg><div class="map-footer"><span>赫尔辛根莫斯肯星图</span><span>09 个星系 / 14 条航线</span></div><div id="broadcast-bar" class="broadcast-bar" hidden aria-live="polite"></div><div id="target-bar" class="target-bar" hidden></div></div>
+        <section class="latest-zone" aria-label="本次出牌"><div class="latest-heading"><span class="eyebrow">LATEST TRANSMISSION</span><span id="latest-label">本次出牌</span></div><div id="latest-content" class="latest-content"><span class="empty-signal">⌁</span><p>宇宙暂时寂静<span>下一次出牌，将在这里留下回声。</span></p></div></section>
+        <div class="deck-area" id="deck-anchor"><div class="deck-stack"><span>◉</span></div><div><b id="deck-count">—</b><small>抽牌堆</small></div></div>
+        <button class="zoom-map" id="map-info-btn" aria-label="星图说明">⌘<span>星图</span></button>
+      </section>
+      <section class="hand-dock" aria-label="你的手牌与操作">
+        <div id="handoff-cover" class="handoff-cover" hidden></div>
+        <div class="self-panel"><div class="self-ident"><span class="avatar self-avatar" id="self-avatar">观</span><div><b id="self-name">观测者 <em>你</em></b><span id="self-galaxy">坐标 5 · 太阳系</span></div></div><div class="self-energy"><span>◇</span><span class="energy-reading"><b id="energy-value">12</b></span><small>能量</small><span class="self-hand-counter" aria-label="当前手牌数"><i class="hand-card-symbol" aria-hidden="true"></i><b id="self-hand-number">4</b></span><span class="income" id="income-value">+2 / 回合</span></div><div class="self-assets" id="self-assets" aria-label="已建建筑与在飞打击"></div><div class="incoming-warning" id="incoming-warning" role="alert" aria-live="assertive" hidden></div><div class="privacy-note"><span>◈</span> 只有你知道自己的坐标</div></div>
+        <div class="hand-center"><div class="hand-heading"><span>你的手牌 <b id="hand-count">4</b><small>单击查看 · 拖入地图出牌</small></span><span class="category-legend"><i class="broadcast-dot"></i>广播<i class="build-dot"></i>建设<i class="strike-dot"></i>打击</span></div><div id="hand" class="hand"></div></div>
+        <div class="actions-panel"><div class="turn-badge"><span class="live-dot"></span><span id="action-status">行动阶段</span></div><p id="action-hint">逐张出牌，也可以留牌。<br>结束行动后补至 4 张。</p><button id="discard-btn" class="secondary-btn">弃牌 <span>⇄</span></button><button id="end-btn" class="primary-btn">结束行动 <span>→</span></button></div>
+      </section>
+      <section id="broadcast-reveal" class="broadcast-reveal" aria-label="最新一批出牌的完整公开信息" hidden></section>
+      <footer class="bottom-bar"><span><i class="live-dot"></i>本地试玩 · 不含 AI</span><span id="status-message" aria-live="polite">单击查看卡牌，拖到星系地图出牌。</span><button id="reset-demo-btn">重置演示 <span>↻</span></button></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <div id="overlay" class="overlay" hidden><section class="dialog" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"></section></div>
+  <div id="flight-layer" aria-hidden="true"></div><div id="energy-fx-layer" aria-hidden="true"></div>
+  <script type="module" src="./lobby.js?v=20261028-replay-filename1"></script>
+</body>
+</html>
