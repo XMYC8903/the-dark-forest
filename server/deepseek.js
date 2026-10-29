@@ -1,4 +1,4 @@
-import {CARDS,GALAXIES,distance} from '../dist/game.js';
+import {CARDS,GALAXIES,distance} from '../shared/game.js';
 import {gameView,deepSeekRulebook} from './room-core.js';
 
 const cardInfo=key=>{const c=CARDS[key];return c?{name:c.name,type:c.type,cost:c.cost,range:c.range===Infinity?'无限':c.range,level:c.level===Infinity?'无限':c.level,face:c.face,income:c.income,defense:c.defense,star:c.star,escape:c.escape,instant:c.instant}:null;};

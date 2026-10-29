@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Game} from '../dist/game.js';
+import {Game} from '../shared/game.js';
 import {newRoom,applyGameAction,roomView,mutateRoom} from '../server/room-core.js';
 import {GameRoom} from '../server/worker.js';
 import {OrderedStatePlayback} from '../dist/spectator-motion.js';

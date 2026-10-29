@@ -1,4 +1,4 @@
-import {CARDS,GALAXIES,distance} from '../dist/game.js';
+import {CARDS,GALAXIES,distance} from '../shared/game.js';
 
 const pick=(items,rng)=>items[Math.floor(rng()*items.length)];
 const defense=p=>Math.max(0,...p.builds.map(c=>CARDS[c.key].defense||0));

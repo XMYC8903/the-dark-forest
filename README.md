@@ -1,6 +1,6 @@
 # 黑暗森林 · 网页卡牌游戏
 
-支持 3–6 人在线对战、多人全知观战和同设备 Demo。游戏规则以项目根目录的 `docs/项目规则摘要.md` 和后续用户裁定为准。
+支持 3–6 人在线对战、多人全知观战和同设备 Demo。游戏规则以仓库内的 [游戏规则](docs/项目规则.md) 和后续用户裁定为准。
 
 ## 在线功能
 
@@ -19,12 +19,14 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-访问终端显示的地址。`pnpm demo` 只运行静态同设备演示，不提供在线账号和房间。运行 `pnpm test` 执行 Node 测试。`pnpm check:worker` 和 `pnpm check:social` 是需要本地 Worker 服务的检查脚本。
+访问终端显示的地址。`pnpm demo` 只运行静态同设备演示，不提供在线账号和房间。运行 `pnpm check:generated`、`pnpm lint`、`pnpm typecheck` 和 `pnpm test` 执行检查。ESLint 目前覆盖源码的基础错误规则；类型检查目前覆盖 AI 计时模块。`pnpm check:worker` 和 `pnpm check:social` 是需要本地 Worker 服务的检查脚本。
 
 ## 配置和部署
 
-Worker 配置位于 `wrangler.jsonc`，入口是 `server/worker.js`，静态资源和共享规则当前位于 `dist/`。在线账号需要配置 `AUTH_PEPPER`，DeepSeek 需要 `DEEPSEEK_API_KEY`，后台日志接口需要 `ADMIN_LOG_TOKEN`。密钥应通过 Worker Secret 配置；本地开发可使用不纳入版本控制的 `.dev.vars`。
+Worker 配置位于 `wrangler.jsonc`，入口是 `server/worker.js`，共享规则源码位于 `shared/game.js`；`pnpm build` 将其复制到 `dist/game.js` 供浏览器使用，其他静态资源位于 `dist/`。修改共享规则后运行 `pnpm build`，并一同提交生成的浏览器文件。在线账号需要配置 `AUTH_PEPPER`，DeepSeek 需要 `DEEPSEEK_API_KEY`，后台日志接口需要 `ADMIN_LOG_TOKEN`。密钥应通过 Worker Secret 配置；本地开发可使用不纳入版本控制的 `.dev.vars`。
 
-`pnpm deploy` 部署到 Cloudflare。GitHub Actions 在推送 `main` 或手动触发时安装依赖、运行测试，测试通过后才部署。Actions 需要仓库 Secret `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`。
+`pnpm deploy` 部署到 Cloudflare。GitHub Actions 在推送 `main` 或手动触发时安装依赖并执行生成文件一致性检查、lint、类型检查和测试，通过后才部署。Actions 需要仓库 Secret `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`。
 
 线上后台日志可能包含隐藏牌局信息，只能通过管理员密钥读取。`pnpm logs` 列出对局索引，具体导出参数见 `scripts/export-private-logs.mjs`；不要提交密钥或导出的私有日志。
+
+生产入口为 `xmyc.dpdns.org`；`workers.dev` 和 Workers 预览地址已在配置中关闭。

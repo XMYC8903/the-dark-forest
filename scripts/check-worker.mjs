@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import {decideAI} from '../server/ai.js';
-import {seeded} from '../dist/game.js';
+import {seeded} from '../shared/game.js';
 const base=process.argv[2]||'http://127.0.0.1:8787';
 async function client() {
   const r=await fetch(base+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'联机验证'+crypto.randomUUID().slice(0,7),password:crypto.randomUUID()})});assert.equal(r.status,201);

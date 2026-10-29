@@ -1,4 +1,4 @@
-import {Game, CARDS, GALAXIES, EDGES, seeded} from '../dist/game.js';
+import {Game, CARDS, GALAXIES, EDGES, seeded} from '../shared/game.js';
 import {AI_NAMES} from '../dist/ai-labels.js';
 
 export const LEVELS = {easy:'简单', normal:'普通', hard:'困难', deepseek:'云端'};

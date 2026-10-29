@@ -11,9 +11,20 @@
     "check:worker": "node scripts/check-worker.mjs",
     "check:social": "node scripts/check-social.mjs",
     "logs": "node scripts/export-private-logs.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "build": "node scripts/build.mjs",
+    "check:generated": "node scripts/build.mjs --check",
+    "prestart": "node scripts/build.mjs",
+    "predev": "node scripts/build.mjs",
+    "predemo": "node scripts/build.mjs",
+    "predeploy": "node scripts/build.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "wrangler": "^4.152.0"
+    "eslint": "^10.13.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.152.0",
+    "ws": "^8.21.0"
   }
 }

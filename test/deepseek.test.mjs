@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Game} from '../dist/game.js';
+import {Game} from '../shared/game.js';
 import {decideDeepSeek} from '../server/deepseek.js';
 import {gameView,applyGameAction,newRoom} from '../server/room-core.js';
 import {inferPositions,rankActions} from '../server/deepseek-tactics.js';

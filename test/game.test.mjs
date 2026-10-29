@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Game,CARDS,distance} from '../dist/game.js';
+import {Game,CARDS,distance} from '../shared/game.js';
 
 function give(g,id,key){const p=g.players[id];for(const zone of [g.deck,g.discard,...g.players.flatMap(x=>[x.hand,x.builds])]){const i=zone.findIndex(c=>c.key===key);if(i>=0){const c=zone.splice(i,1)[0];p.hand.push(c);return c;}}throw Error('Missing test card '+key);}
 function conserve(g){const cards=g.allPhysicalCards();assert.equal(cards.length,64);assert.equal(new Set(cards.map(c=>c.id)).size,64);}

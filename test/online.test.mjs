@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Game,CARDS,seeded} from '../dist/game.js';
+import {Game,CARDS,seeded} from '../shared/game.js';
 import {newRoom,mutateRoom,roomView,gameView,saveGame,restoreGame,applyGameAction,appendDeepSeekUpdates} from '../server/room-core.js';
 import {decideAI} from '../server/ai.js';
 

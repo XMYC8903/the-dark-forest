@@ -4,7 +4,7 @@ import {AccountHub,randomCode} from '../server/accounts.js';
 import worker,{GameRoom} from '../server/worker.js';
 import {newRoom} from '../server/room-core.js';
 import {logParts,readLog} from '../server/private-logs.js';
-import {Game} from '../dist/game.js';
+import {Game} from '../shared/game.js';
 import {decideDeepSeek} from '../server/deepseek.js';
 class Storage {
   map=new Map();
