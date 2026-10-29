@@ -39,7 +39,8 @@ test('等待室可切换观战席并在退出时恢复原玩家座位',()=>{
   assert.equal(room.members.length,2);assert.equal(room.spectator.id,'guest-a');
   const observerView=roomView(room,'guest-a');
   assert.equal(observerView.role,'spectator');assert.equal(observerView.members.length,2);assert.equal(observerView.spectatorOccupied,true);
-  assert.throws(()=>mutateRoom(room,'guest-b','watch'),/观战席已被占用/);
+  mutateRoom(room,'guest-b','watch');assert.equal(room.spectators.length,2);
+  mutateRoom(room,'guest-b','watch');assert.equal(roomView(room,'guest-b').role,'player');
   assert.throws(()=>mutateRoom(room,'guest-a','action',{action:{type:'end'}}),/退出这个房间|观战者/);
   mutateRoom(room,'guest-a','watch');
   assert.equal(room.members.length,3);assert.equal(room.members[1].id,'guest-a');
@@ -172,6 +173,14 @@ test('未揭示广播使用每批独立的公开标识，不能凭旧牌 ID 追�
     assert.notEqual(other.id,card.id);assert.equal(other.key,undefined);hidden.push(other.id);
   }
   assert.notEqual(hidden[0],hidden[1]);
+});
+test('困难 AI 长局面对低评分打击时仍尝试出手',()=>{
+  const game=new Game({count:3,demo:false,seed:123}),me=game.players[0];game.round=30;me.energy=20;
+  const view=gameView(game,0);view.players[0].hand=[{id:'shot',key:'nuclear'}];
+  for(const p of view.players.slice(1))p.builds=[{id:'shield'+p.id,key:'ghost'}];
+  const history=Array.from({length:9},(_,i)=>({type:'launch',actor:0,target:i+1}));
+  const action=decideAI(view,0,'hard',history,()=>0);
+  assert.equal(action.type,'play');assert.equal(action.cardId,'shot');assert.notEqual(action.target,me.galaxy);
 });
 test('AI 策略只使用公开观察与自身视角，并能完成多人数整局',()=>{
   const results=[];

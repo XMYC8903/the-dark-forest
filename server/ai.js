@@ -78,6 +78,12 @@ export function decideAI(view,me,level='normal',history=[],rng=Math.random) {
     }
   }
   moves.sort((a,b)=>b.score-a.score);
+  // In prolonged games, use affordable strikes even when uncertainty depresses
+  // their score; avoid repeatedly targeting a strike already in flight.
+  if(hard&&view.round>=30&&!incoming.length){
+    const attack=moves.find(m=>{const card=CARDS[p.hand.find(c=>c.id===m.action.cardId)?.key];return m.action.target!==undefined&&card?.type==='strike'&&!card.instant&&!view.strikes.some(s=>s.owner===me&&s.target===m.action.target);});
+    if(attack)return attack.action;
+  }
   if(moves.length&&(easy?(!view.played||rng()>.35):moves[0].score>1))return moves[0].action;
   if(!view.played&&p.hand.length) {
     const discard=p.hand.filter(c=>{

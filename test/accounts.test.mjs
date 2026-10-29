@@ -79,6 +79,12 @@ test('登录尝试有限流，退出的会话不可继续访问好友接口',asy
   assert.equal((await f.call('/auth/login',{name:'限流账号',password:'test-password-123'})).status,429);
   await f.call('/auth/logout',{},a.token);assert.equal((await f.call('/social/state',{},a.token)).status,401);
 });
+test('不同房间码共用账号的加入频率限制',async()=>{
+  const f=fixture(),a=await f.register('加入限流甲'),b=await f.register('加入限流乙');
+  for(let i=0;i<40;i++)assert.equal((await f.call('/internal/room-access',{id:a.account.id,room:'ROOM'+i})).status,200);
+  assert.equal((await f.call('/internal/room-access',{id:a.account.id,room:'OTHER'})).status,429);
+  assert.equal((await f.call('/internal/room-access',{id:b.account.id,room:'OTHER'})).status,200);
+});
 test('日志分片完整保留中文大提示词，后台接口拒绝普通用户和跨域',async()=>{
   const store=new Storage(),data={kind:'deepseek',matchId:crypto.randomUUID(),request:{messages:[{role:'system',content:'三体规则🚀'.repeat(20000)}]},response:{choices:[{message:{content:'{"choice":2}',reasoning_content:'模型思考'}}]}};
   const parts=logParts('audit:test',data);assert.ok(Object.keys(parts).length>3);await store.put(parts);assert.deepEqual(await readLog(store,'audit:test',parts['audit:test']),data);
