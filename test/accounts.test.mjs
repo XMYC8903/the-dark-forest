@@ -54,9 +54,12 @@ test('状态区分在线离线对局观战，普通搜索不泄漏非好友状�
   await f.call('/social/request',{id:b.account.id},a.token);await f.call('/social/respond',{id:a.account.id,accept:true},b.token);
   const state=()=>f.call('/social/state',{},a.token);
   assert.equal((await state()).friends[0].status,'online');
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:1,status:'playing',members:[{accountId:b.account.id}],spectator:null}});
+  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:1,status:'waiting',members:[{accountId:b.account.id}],spectator:null}});
+  assert.equal((await state()).friends[0].status,'in_room');
+  assert.equal((await f.call('/social/invite',{id:b.account.id,room:'B2C4E6'},a.token)).status,403);
+  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:2,status:'playing',members:[{accountId:b.account.id}],spectator:null}});
   assert.equal((await state()).friends[0].status,'playing');
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:2,status:'playing',members:[],spectator:{accountId:b.account.id}}});
+  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:3,status:'playing',members:[],spectator:{accountId:b.account.id}}});
   assert.equal((await state()).friends[0].status,'spectating');
   await f.call('/internal/presence',{room:{id:'A2C4E6',revision:1,status:'playing',members:[{accountId:b.account.id}],spectator:null}});
   assert.equal((await state()).friends[0].status,'spectating');
@@ -67,6 +70,9 @@ test('邀请只允许好友且不能冒领；预览不消费，成功加入后�
   assert.equal((await f.call('/social/invite',{id:b.account.id,room:'A2C4E6'},a.token)).status,403);
   await f.call('/social/request',{id:b.account.id},a.token);await f.call('/social/respond',{id:a.account.id,accept:true},b.token);
   await f.call('/social/invite',{id:b.account.id,room:'A2C4E6',roomName:'好友房'},a.token);
+  assert.equal((await f.call('/social/invite',{id:b.account.id,room:'A2C4E6'},a.token)).status,429);
+  assert.ok((await f.call('/social/state',{},a.token)).inviteCooldowns[b.account.id]>Date.now());
+  const now=Date.now;Date.now=()=>now()+10001;try{assert.equal((await f.call('/social/invite',{id:b.account.id,room:'A2C4E6'},a.token)).status,200);}finally{Date.now=now;}
   const i=(await f.call('/social/state',{},b.token)).invites[0];assert.equal(i.fromName,a.account.name);
   assert.equal((await f.call('/social/invitation',{id:i.id,accept:true},a.token)).status,409);
   assert.equal((await f.call('/social/invitation',{id:i.id,accept:true},b.token)).invite.room,'A2C4E6');

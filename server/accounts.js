@@ -48,7 +48,7 @@ export class AccountHub {
     const online=[...sessions.values()].some(s=>s.expiresAt>Date.now()&&s.lastSeen>Date.now()-75000);
     if(!online)return 'offline';
     const r=await this.ctx.storage.get('presence:'+a.id);
-    return r?.status==='playing'?(r.role==='spectator'?'spectating':'playing'):'online';
+    return r?.status==='playing'?(r.role==='spectator'?'spectating':'playing'):r?.room?'in_room':'online';
   }
   async fetch(request){
     return this.ctx.blockConcurrencyWhile(async()=>{
@@ -140,7 +140,9 @@ export class AccountHub {
       }
       const invites=[...(await store.list({prefix:'invite:'+a.id+':'})).values()].filter(i=>i.status==='pending'&&i.expiresAt>Date.now());
       const presence=await store.get('presence:'+a.id);
-      return json({account:profile(a),friends,requests,invites,currentRoom:presence?.room||null});
+      const cooldownPrefix='invite-cooldown:'+a.id+':',inviteCooldowns={};
+      for(const [key,at] of await store.list({prefix:cooldownPrefix})){if(at+10000>Date.now())inviteCooldowns[key.slice(cooldownPrefix.length)]=at+10000;else await store.delete(key);}
+      return json({account:profile(a),friends,requests,invites,inviteCooldowns,currentRoom:presence?.room||null});
     }
     if(path==='/social/profile'){
       await this.limit('profile:'+a.id,80,60000);
@@ -177,13 +179,15 @@ export class AccountHub {
       await this.limit('invite:'+a.id,15,60000);
       const id=String(body.id||'').toUpperCase(),r=await store.get(relationKey(a.id,id));requireThat(r?.status==='accepted','只能邀请好友',403);
       const other=await store.get('account:'+id);requireThat(other&&await this.status(other)==='online','只能邀请在线好友',403);
+      const cooldownKey='invite-cooldown:'+a.id+':'+id,now=Date.now(),last=await store.get(cooldownKey);
+      requireThat(!last||now-last>=10000,'邀请过于频繁，请稍后再试',429);
       const pending=[...(await store.list({prefix:'invite:'+id+':'})).entries()];
       for(const [key,i] of pending)if(i.expiresAt<Date.now()||i.status!=='pending')await store.delete(key);
       requireThat(pending.filter(([,i])=>i.expiresAt>Date.now()&&i.status==='pending').length<30,'对方待处理邀请过多');
       const duplicate=pending.find(([,i])=>i.from===a.id&&i.room===body.room&&i.status==='pending'&&i.expiresAt>Date.now());
-      if(duplicate)return json({ok:true});
+      if(duplicate){await store.put(cooldownKey,now);return json({ok:true});}
       const invite={id:crypto.randomUUID(),from:a.id,fromName:a.name,room:body.room,roomName:body.roomName,status:'pending',createdAt:Date.now(),expiresAt:Date.now()+600000};
-      await store.put('invite:'+id+':'+invite.id,invite);return json({ok:true});
+      await store.put({['invite:'+id+':'+invite.id]:invite,[cooldownKey]:now});return json({ok:true});
     }
     if(path==='/social/invitation'){
       const key='invite:'+a.id+':'+String(body.id||''),i=await store.get(key);

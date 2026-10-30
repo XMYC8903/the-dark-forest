@@ -47,6 +47,7 @@
 .presence-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#889198;flex:none}
 .presence.online{color:#b9dba6}.presence-dot.online{background:#8dbf75;box-shadow:0 0 8px #8dbf7555}
 .presence.playing{color:#e3c67d}.presence-dot.playing{background:#d7ad51;box-shadow:0 0 8px #d7ad5144}
+.presence.in_room{color:#e3c67d}.presence-dot.in_room{background:#d7ad51;box-shadow:0 0 8px #d7ad5144}
 .presence.spectating{color:#e3c67d}.presence-dot.offline{background:#69727b}
 .presence-eye{width:16px;height:12px;fill:none;stroke:#d7b454;stroke-width:1.5}.presence-eye .eye-pupil{fill:#d7b454;stroke:none}
 .friend-action{flex:none;border-radius:7px;padding:8px 12px;font:inherit;font-size:11px;white-space:nowrap;cursor:pointer;transition:filter .15s ease,transform .15s ease}
@@ -62,3 +63,9 @@
 .room-seat.seat-add:hover .seat-mark{border-color:#c2d4ae;color:#e0edce}
 .room-seat.seat-add:focus-visible,.friend-action:focus-visible,.identity-tag:focus-visible{outline:2px solid #b7cc9e;outline-offset:3px}
 @media(max-width:600px){.portal-panel .account-home{width:100%}.friend-person{gap:7px}.friend-person>b{max-width:95px}.friend-action{padding:8px 9px;font-size:10px}.friends-page .friend-search button{min-width:66px}.social-row{gap:8px}}
+#invite-notice{width:min(430px,calc(100vw - 32px));margin:auto;padding:26px;border:1px solid #425465;border-radius:18px;background:#131e29;color:#dce3e8;box-shadow:0 24px 90px #0008;box-sizing:border-box;font:inherit}
+#invite-notice::backdrop{background:#050a11aa;backdrop-filter:blur(6px)}
+#invite-notice>small{font:9px monospace;letter-spacing:2px;color:#91a6a5}
+#invite-notice h2{margin:12px 0 18px;font-size:22px}#invite-notice p{font-size:13px;line-height:1.7;color:#aebfcb}#invite-notice p b{color:#d6e5c4}#invite-notice .invite-notice-code{color:#8fa4b1;font-size:11px}#invite-notice .social-error{color:#ed9e94;min-height:18px}
+.invite-notice-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}.invite-notice-actions button{font:inherit;cursor:pointer}.invite-notice-actions button:disabled{opacity:.45;cursor:default}
+.friend-action.invite:disabled{border-color:#606a70;background:#273039;color:#92999b;opacity:.7}
