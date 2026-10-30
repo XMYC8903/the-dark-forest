@@ -1,4 +1,4 @@
-import {svgArt} from './card-art.js';
+import {svgArt,shipArt} from './card-art.js';
 import {Game,CARDS,COLORS,TYPES,GALAXIES,EDGES,distance} from './game.js?v=20261025-lightship-energy';
 import {cardFlight,cardInto} from './card-motion.js?v=20261025-observer-motion';
 import {summarizeBuildings,broadcastEffect,broadcastPresentation,strikeFeedback,strikeNotice} from './view-model.js?v=20261025-green-loss-mark';
@@ -73,7 +73,7 @@ function updateTurnFeedback(){
   effect=document.createElement('span');effect.className='death-cross transient-feedback'+(survived?' survived-cross':'');
  }else{
   const locked=state.feedback==='locked';effect=document.createElement('span');effect.className='player-feedback transient-feedback '+(locked?'feedback-lock':'feedback-escape');
-  effect.innerHTML=locked?'<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M15 21v-6a9 9 0 0 1 18 0v6M11 21h26v21H11zM24 29v6"/><circle cx="24" cy="28" r="1"/></svg>':'<svg viewBox="0 0 130 82" aria-hidden="true">'+art.ship+'</svg>';
+  effect.innerHTML=locked?'<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M15 21v-6a9 9 0 0 1 18 0v6M11 21h26v21H11zM24 29v6"/><circle cx="24" cy="28" r="1"/></svg>':'<svg viewBox="0 0 130 82" aria-hidden="true">'+shipArt+'</svg>';
  }
  effect.dataset.feedbackSignature=state.signature;effect.setAttribute('aria-hidden','true');target.append(effect);
 }

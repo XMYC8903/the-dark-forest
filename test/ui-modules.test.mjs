@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {validateReplayArchive,sanitizeReplayArchive} from '../dist/replay-archive.js';
-import {svgArt} from '../dist/card-art.js';
+import {svgArt,shipArt} from '../dist/card-art.js';
 
 test('回放模块校验并净化导入数据',()=>{
   assert.throws(()=>validateReplayArchive({}),/有效/);
@@ -16,5 +16,6 @@ test('回放模块校验并净化导入数据',()=>{
 
 test('卡牌插图模块输出 SVG 并支持缺省图案',()=>{
   assert.match(svgArt({art:'solar'}),/^<svg/);
+  assert.match(shipArt,/<path/);assert.ok(svgArt({art:'ship'}).includes(shipArt));
   assert.match(svgArt({art:'unknown'}),/<ellipse/);
 });

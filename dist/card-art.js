@@ -9,4 +9,5 @@ const art={
  dimension:'<path d="M65 8L106 32L65 57L24 32Z"/><path d="M65 8V57M24 32L65 77L106 32M65 57V77M44 20L86 45M85 20L44 45" opacity=".6"/><ellipse cx="65" cy="55" rx="50" ry="12" opacity=".3"/><path d="M8 69H43M87 69H124"/>',
  lock:'<circle cx="65" cy="40" r="27" opacity=".3"/><path d="M51 34V23Q65 4 79 23V34M46 34H84V66H46Z"/><circle cx="65" cy="46" r="4"/><path d="M65 50V57M21 16L30 24M17 48H29M100 49H114M97 14L89 23M37 74L44 68"/><ellipse cx="65" cy="40" rx="48" ry="12" transform="rotate(-25 65 40)" opacity=".3"/>'
 };
+export const shipArt=art.ship;
 export function svgArt(d){return `<svg class="card-art" viewBox="0 0 130 82" fill="none" stroke="currentColor" stroke-width=".8" aria-hidden="true">${art[d.art]||art.ring}</svg>`;}
