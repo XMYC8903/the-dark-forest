@@ -395,7 +395,15 @@ function drawObserverMap(game){
 }
 async function leaveObserver(){
   spectatorRoomView=false;const id=room.id;leaving=true;
-  try{await api('/rooms/'+id+'/leave',{requestId:requestId()});disconnect();room=null;localStorage.removeItem('df_room');show('home');}
+  try{
+    try{await api('/rooms/'+id+'/leave',{requestId:requestId()});}
+    catch(error){
+      if(error.status!==403&&error.status!==404)throw error;
+      try{await api('/rooms/'+id);}catch(check){if(check.status===403||check.status===404){disconnect();room=null;localStorage.removeItem('df_room');show('home');return;}throw check;}
+      throw error;
+    }
+    disconnect();room=null;localStorage.removeItem('df_room');show('home');
+  }
   finally{leaving=false;}
 }
 document.addEventListener('portal:home',()=>show('home'));

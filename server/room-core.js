@@ -281,7 +281,7 @@ export function mutateRoom(room,sessionId,operation,body={}) {
     room.members.push({id:sessionId,name:cleanName(body.username),accountId:body.accountId||null,bot:null});
   } else {
     const activeMember=member>=0&&!room.members[member].exited;
-    requireThat(activeMember||host&&isSpectator,'你已退出这个房间',403);
+    requireThat(activeMember||host&&isSpectator||operation==='leave'&&isSpectator,'你已退出这个房间',403);
     if(operation==='action') {
       requireThat(activeMember&&!isSpectator,'观战者不能执行游戏操作',403);
       requireThat(room.status==='playing','对局未在进行');

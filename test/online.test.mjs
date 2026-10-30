@@ -68,6 +68,15 @@ test('观战视角获取全场手牌摘要、坐标与打击进度，玩家视�
   assert.equal(player.game.players[0].hand,undefined);assert.equal(player.game.players[0].galaxy,undefined);
   assert.equal(player.spectator,undefined);
 });
+test('非房主观战者可以退出，其他观战者与玩家不受影响',()=>{
+  const room=newRoom('87654321','host','观战退出','房主');
+  room.members.push({id:'a',name:'玩家甲',bot:null},{id:'b',name:'玩家乙',bot:null});mutateRoom(room,'host','start');
+  mutateRoom(room,'watch-one','watch',{username:'观战甲'});mutateRoom(room,'watch-two','watch',{username:'观战乙'});
+  assert.throws(()=>mutateRoom(room,'watch-one','action',{action:{type:'end'}}),/退出这个房间|观战者/);
+  mutateRoom(room,'watch-one','leave');
+  assert.throws(()=>roomView(room,'watch-one'),/退出|尚未加入/);
+  assert.equal(roomView(room,'watch-two').role,'spectator');assert.equal(roomView(room,'host').role,'player');assert.equal(room.status,'playing');
+});
 test('每个 DeepSeek 座位开局获得独立规则上下文，并只接收自己的私有牌局变化',()=>{
   const room=newRoom('87654321','host','记忆测试','房主');
   room.members.push({id:'guest',name:'朋友',bot:null});mutateRoom(room,'host','bot',{level:'deepseek'});mutateRoom(room,'host','start');
