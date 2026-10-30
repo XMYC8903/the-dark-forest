@@ -91,6 +91,11 @@ export default {
           requireThat(view.status==='waiting'&&view.count<6,'只能邀请好友加入有空位的等待房间');body.room=code;body.roomName=view.name;
         }
         const response=await hub(env,op,body,{'x-auth-token':found});
+        if(op==='/social/watch-friend'&&response.ok){
+          const target=await response.json(),code=target.room;
+          await roomAccess(env,account.id,code);
+          return await stub(env.ROOMS,code).fetch(new Request('https://internal/',{method:'POST',headers:{'x-session':principal,'x-account':encodeURIComponent(JSON.stringify(account)),'x-operation':'watch-friend'},body:JSON.stringify({friendId:target.friendId,requestId:body.requestId})}));
+        }
         if(op!=='/social/invitation'||!response.ok||body.accept!==true)return response;
         const data=await response.json(),code=data.invite.room;
         await roomAccess(env,account.id,code);
@@ -231,8 +236,15 @@ export class GameRoom {
         }
         const backup=serialized(this.room);
         try {
+          if(operation==='watch-friend'){
+            requireThat(this.room.status==='playing','好友的对局已结束',409);
+            const friendPresent=this.room.members.some(p=>p.accountId===body.friendId&&!p.exited&&!p.bot)||roomSpectators(this.room).some(p=>p.accountId===body.friendId);
+            requireThat(friendPresent,'好友已离开该对局',409);
+            if(roomSpectators(this.room).some(p=>p.id===session))return json(roomView(this.room,session));
+            requireThat(!this.room.members.some(p=>p.id===session&&!p.exited),'你已在该对局中',409);
+          }
           if(operation==='bot'&&body.level==='deepseek')requireThat(Boolean(this.env.DEEPSEEK_API_KEY),'房间服务器尚未配置 DeepSeek API Key。请管理员先设置 DEEPSEEK_API_KEY。',503);
-          mutateRoom(this.room,session,operation,body);
+          mutateRoom(this.room,session,operation==='watch-friend'?'watch':operation,body);
           if(body.requestId)this.room.receipts.push({id:String(body.requestId).slice(0,80),session});
           this.room.receipts=this.room.receipts.slice(-100);
           await this.commit({operation,actor:session,action:operation==='action'?body.action:null});

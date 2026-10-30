@@ -79,6 +79,18 @@ test('邀请只允许好友且不能冒领；预览不消费，成功加入后�
   assert.equal((await f.call('/social/state',{},b.token)).invites.length,1);
   await f.call('/social/invitation',{id:i.id,consume:true},b.token);assert.equal((await f.call('/social/state',{},b.token)).invites.length,0);
 });
+test('只有好友的进行中对局可以通过好友观战',async()=>{
+  const f=fixture(),a=await f.register('观战甲'),b=await f.register('观战乙'),c=await f.register('观战丙');
+  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:1,status:'playing',members:[{accountId:b.account.id}],spectator:null}});
+  assert.equal((await f.call('/social/watch-friend',{id:b.account.id},a.token)).status,403);
+  await f.call('/social/request',{id:b.account.id},a.token);await f.call('/social/respond',{id:a.account.id,accept:true},b.token);
+  assert.deepEqual((await f.call('/social/watch-friend',{id:b.account.id},a.token)).room,'A2C4E6');
+  assert.equal((await f.call('/social/watch-friend',{id:b.account.id},c.token)).status,403);
+  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:2,status:'playing',members:[],spectator:{accountId:b.account.id}}});
+  assert.equal((await f.call('/social/watch-friend',{id:b.account.id},a.token)).room,'A2C4E6');
+  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:3,status:'finished',members:[{accountId:b.account.id}],spectator:null}});
+  assert.equal((await f.call('/social/watch-friend',{id:b.account.id},a.token)).status,409);
+});
 test('登录尝试有限流，退出的会话不可继续访问好友接口',async()=>{
   const f=fixture(),a=await f.register('限流账号');
   for(let i=0;i<11;i++)assert.equal((await f.call('/auth/login',{name:'限流账号',password:'bad-password'})).status,401);

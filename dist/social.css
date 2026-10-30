@@ -69,3 +69,5 @@
 #invite-notice h2{margin:12px 0 18px;font-size:22px}#invite-notice p{font-size:13px;line-height:1.7;color:#aebfcb}#invite-notice p b{color:#d6e5c4}#invite-notice .invite-notice-code{color:#8fa4b1;font-size:11px}#invite-notice .social-error{color:#ed9e94;min-height:18px}
 .invite-notice-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}.invite-notice-actions button{font:inherit;cursor:pointer}.invite-notice-actions button:disabled{opacity:.45;cursor:default}
 .friend-action.invite:disabled{border-color:#606a70;background:#273039;color:#92999b;opacity:.7}
+.friend-action.watch{border:1px solid #718a6366;background:#638b4733;color:#c9dfb5}
+.friend-watch-error:empty{display:none}.friend-watch-error{margin:12px 0 0}

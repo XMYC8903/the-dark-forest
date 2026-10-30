@@ -151,6 +151,14 @@ export class AccountHub {
       return json({account:profile(other),status:id===a.id||r?.status==='accepted'?await this.status(other):null,
         relationship:id===a.id?'self':r?.status==='accepted'?'friend':r?.status==='pending'?(r.from===a.id?'sent':'received'):'none'});
     }
+    if(path==='/social/watch-friend'){
+      await this.limit('social-watch:'+a.id,30,60000);
+      const id=String(body.id||'').toUpperCase(),relation=await store.get(relationKey(a.id,id));
+      requireThat(id!==a.id&&relation?.status==='accepted','只能观战好友的对局',403);
+      const friend=await store.get('account:'+id),presence=await store.get('presence:'+id);
+      requireThat(friend&&['playing','spectating'].includes(await this.status(friend))&&presence?.status==='playing'&&presence.room,'好友当前没有可观战的对局',409);
+      return json({room:presence.room,friendId:id});
+    }
     if(path==='/social/request'){
       await this.limit('social:'+a.id,40,60000);
       const id=String(body.id||'').toUpperCase();requireThat(id!==a.id,'不能添加自己');
