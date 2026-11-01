@@ -12,7 +12,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const levels={easy:'简单',normal:'普通',hard:'困难',deepseek:'DeepSeek'};
 let username=localStorage.getItem('df_name')||'观测者'+String(Math.floor(Math.random()*9000)+1000);
 localStorage.setItem('df_name',username);
-let screen='home',room=null,rooms=[],socket=null,retry=null,heartbeat=null,listTimer=null,entryTimer=null,entryExitTimer=null,connected=false,requesting=false,leaving=false,roomRevision=0,replayArchive=null,replayIndex=0,replayPlaying=false,replayTimer=null,observerEndPromptDismissed=false,observerReplaySaving=false,observerReplaySaveError='',observerReplayRetryDestination='room',observerSaveToastTimer=null,spectatorRoomView=false,roomDOMState=null;
+let screen='home',room=null,rooms=[],socket=null,retry=null,heartbeat=null,listTimer=null,entryTimer=null,entryExitTimer=null,connected=false,requesting=false,leaving=false,roomRevision=0,replayArchive=null,replayIndex=0,replayPlaying=false,replayTimer=null,observerEndPromptDismissed=false,observerReplaySaving=false,observerReplaySaveError='',observerReplayRetryDestination='room',observerSaveToastTimer=null,spectatorRoomView=false,roomDOMState=null,observerHistory=null;
 const sessionReady=fetch('/api/session',{credentials:'same-origin'}).then(async r=>{if(!r.ok)throw Error('联机服务器尚未启动，Demo 仍可试玩');return r.json();});
 sessionReady.catch(()=>{});
 async function api(path,body) {
@@ -49,7 +49,7 @@ function setScreen(next) {
     entryTimer=setTimeout(()=>{entry.classList.add('leaving');arriving.classList.remove('table-arriving');entryExitTimer=setTimeout(()=>{entry.hidden=true;entry.classList.remove('leaving');},360);},820);
   }else{entry.hidden=true;entry.classList.remove('leaving');}
   if(next!=='table')suspendTable();
-  if(next!=='spectator')observerPlayback.stop();
+  if(next!=='spectator'){observerPlayback.stop();observerHistory=null;}
   if(next!=='spectator'&&replayArchive){clearReplayTimer();replayPlaying=false;replayArchive=null;replayIndex=0;}
   window.scrollTo(0,0);
 }
@@ -343,13 +343,21 @@ function renderSpectator(view=room){
   }
   const hashEvent=text=>{let hash=2166136261;for(let i=0;i<text.length;i++){hash^=text.charCodeAt(i);hash=Math.imul(hash,16777619);}return(hash>>>0).toString(36);};
   const occurrences=new Map();
-  const eventList=room.isReplay?(game.publicEvents||[]):(game.publicEvents||[]).slice(-60);
+  const allEvents=game.publicEvents||[],recentEvents=allEvents.slice(-100).map(event=>JSON.stringify(event));
+  let newEventCount=0;
+  if(observerHistory?.roomId===room.id&&allEvents.length>=observerHistory.count){
+    const previous=observerHistory.recent;let overlap=Math.min(previous.length,recentEvents.length);
+    while(overlap>0&&!previous.slice(-overlap).every((event,index)=>event===recentEvents[index]))overlap--;
+    newEventCount=Math.min(3,recentEvents.length-overlap);
+  }
+  observerHistory={roomId:room.id,count:allEvents.length,recent:recentEvents};
+  const eventList=room.isReplay?allEvents:allEvents.slice(-60);
   const events=eventList.map(event=>{const signature=JSON.stringify(event),index=occurrences.get(signature)||0;occurrences.set(signature,index+1);return{event,key:`${hashEvent(signature)}-${index}`};}).reverse();
   const split=Math.ceil(game.players.length/2),left=game.players.slice(0,split),right=game.players.slice(split);
   const playerColumn=(players,side)=>`<aside class="observer-player-column ${side}">${players.map(p=>observerPlayerHTML(p,game,strikesFor)).join('')}</aside>`;
   const replayControls=room.isReplay?`<div class="observer-replay-controls" aria-label="回放控制"><button id="replay-back-step" type="button" aria-label="回溯一步">←</button><button id="replay-toggle" type="button" aria-label="${replayPlaying?'暂停回放':'继续播放回放'}" aria-pressed="${replayPlaying}">${replayToggleIcon(replayPlaying)}</button><button id="replay-forward-step" type="button" aria-label="前进一步">→</button><label>第 <input id="replay-round" type="number" min="1" max="${Math.max(1,replayArchive?.rounds||game.round)}" value="${game.round}"> 轮</label><button id="replay-jump" type="button">跳转</button><small>${replayIndex+1} / ${replayArchive?.frames.length||1}</small></div>`:'';
   root.innerHTML=`<header class="observer-header"><div class="brand" aria-label="黑暗森林"><span class="brand-mark">◉</span><span><b>黑暗森林</b><small>THE DARK FOREST</small></span></div><div class="top-status"><span class="live-dot"></span>${room.isReplay?'对局回放':'在线房间'}<span class="status-separator"></span><span class="spectator-connect">${room.isReplay?'本地播放':connected?'实时同步':'连接中…'}</span></div><nav><button class="quiet-btn observer-exit" id="observer-exit">${room.isReplay?'退出回放':'退出观战'}</button></nav></header><div class="observer-room-toolbar${room.isReplay?' is-replay':''}"><div class="room-title"><span class="section-index">01 /</span><h1>${esc(room.name)}</h1><span class="pill">${room.isReplay?'回放':'在线房间'}</span></div>${replayControls}<div class="round-info"><span>第 ${String(game.round).padStart(2,'0')} 轮</span><span class="toolbar-divider"></span><b>${game.over?'对局结束':active?esc(active.name)+' 的回合':'状态同步中'}</b><span class="tiny-dot"></span>${game.pending?.kind==='broadcast'?`<small>广播回应中 · ${esc(galaxyName(game.pending.target))}</small>`:game.pending?.kind==='escape'?'<small>光速飞船逃生决策中</small>':''}</div></div>
-    <main class="observer-table-layout"><div class="observer-roster" aria-label="玩家列表，可横向滑动">${playerColumn(left,'left')}${playerColumn(right,'right')}</div><section class="observer-center-column"><section class="observer-map-panel"><div class="observer-section-heading"><span>星图</span><small>公开坐标与星系状态</small></div><svg id="observer-map" viewBox="0 0 900 430" role="img" aria-label="显示全场玩家位置和打击目标的星图"></svg></section><div class="observer-playback-anchor"></div><section class="observer-history"><div class="observer-section-heading"><span>公开事件记录</span><small>${room.isReplay?'完整记录':'最近 '+events.length+' / '+(game.publicEvents?.length||0)+' 条'} · 抽牌堆 ${game.deckCount} · 弃牌堆 ${game.discardCount}</small></div>${events.length?`<div class="observer-history-list">${events.map(({event:e,key})=>`<div class="event-row event-${esc(e.type)}" data-event-key="${key}" style="--event-color:${eventColors[e.type]||'#aab5c3'}"><i></i><b class="event-tag">${e.round?`第 ${esc(e.round)} 轮 · `:''}${esc(eventNames[e.type]||'事件')}</b><div class="event-content"><span class="event-summary">${esc(eventLine(e))}</span>${eventDetails(e)}</div></div>`).join('')}</div>`:'<p>尚无公开事件。</p>'}</section></section></main>`;
+    <main class="observer-table-layout"><div class="observer-roster" aria-label="玩家列表，可横向滑动">${playerColumn(left,'left')}${playerColumn(right,'right')}</div><section class="observer-center-column"><section class="observer-map-panel"><div class="observer-section-heading"><span>星图</span><small>公开坐标与星系状态</small></div><svg id="observer-map" viewBox="0 0 900 430" role="img" aria-label="显示全场玩家位置和打击目标的星图"></svg></section><div class="observer-playback-anchor"></div><section class="observer-history"><div class="observer-section-heading"><span>公开事件记录</span><small>${room.isReplay?'完整记录':'最近 '+events.length+' / '+(game.publicEvents?.length||0)+' 条'} · 抽牌堆 ${game.deckCount} · 弃牌堆 ${game.discardCount}</small></div>${events.length?`<div class="observer-history-list">${events.map(({event:e,key},index)=>`<div class="event-row event-${esc(e.type)}${index<newEventCount?' event-arriving':''}" data-event-key="${key}" style="--event-color:${eventColors[e.type]||'#aab5c3'}"><i></i><b class="event-tag">${e.round?`第 ${esc(e.round)} 轮 · `:''}${esc(eventNames[e.type]||'事件')}</b><div class="event-content"><span class="event-summary">${esc(eventLine(e))}</span>${eventDetails(e)}</div></div>`).join('')}</div>`:'<p>尚无公开事件。</p>'}</section></section></main>`;
   const roster=root.querySelector('.observer-roster');if(roster)roster.scrollLeft=rosterScroll;
   for(const seat of root.querySelectorAll('[data-observer-player]')){const saved=seatScroll.get(seat.dataset.observerPlayer);if(!saved)continue;const assets=seat.querySelector('.public-assets'),strikes=seat.querySelector('.player-strikes'),hand=seat.querySelector('.observer-hand-row');if(assets)assets.scrollLeft=saved.assets;if(strikes)strikes.scrollLeft=saved.strikes;if(hand)hand.scrollTop=saved.hand;}
   if(observerEndPrompt)root.insertAdjacentHTML('beforeend',observerEndPrompt);
