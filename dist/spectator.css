@@ -397,6 +397,7 @@
   .observer-roster{display:flex;grid-column:1;grid-row:1;gap:10px;min-width:0;overflow-x:auto;overflow-y:hidden;align-items:flex-start;padding:3px 3px 10px;overscroll-behavior-x:contain;touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch}
   .observer-player-column.left,.observer-player-column.right{display:contents}
   .observer-roster .observer-player.player{flex:0 0 clamp(230px,70vw,300px);width:clamp(230px,70vw,300px);min-height:0;height:auto;overflow:visible}
+  .observer-roster .observer-player.eliminated{order:1}
   .observer-center-column{grid-column:1;grid-row:2;min-width:0;height:auto}
 }
 
