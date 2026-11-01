@@ -140,7 +140,7 @@
 .observer-play-cards{min-height:100px}
 .observer-history{max-width:none;min-width:0;margin:0;padding:12px 14px}
 .observer-history .observer-section-heading{margin-bottom:6px}
-.observer-history-list{grid-template-columns:minmax(0,1fr);max-height:340px;gap:0;overflow:auto}
+.observer-history-list{grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;align-content:start;max-height:340px;gap:0;overflow:auto}
 .observer-history-list>div{font-size:10px}
 .observer-history-list>div i{background:var(--observer-color,#aac58d);box-shadow:0 0 7px color-mix(in srgb,var(--observer-color,#aac58d) 35%,transparent)}
 @media(max-width:1180px){
