@@ -1,5 +1,6 @@
 import {validateReplayArchive,sanitizeReplayArchive} from './replay-archive.js';
 import {saveResumeArchive,loadResumeArchive,deleteResumeArchive} from './replay-resume.js?v=20261101-replay-resume1';
+import {matchesObserverEvent} from './observer-event-filter.js?v=20261101-history-filters1';
 import {launchDemo,launchOnline,receiveOnlineRoom,suspendTable} from './app.js?v=20261028-no-deepseek-dialog1';
 import {AI_NAMES} from './ai-labels.js';
 import {requestId} from './request-id.js';
@@ -13,7 +14,8 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const levels={easy:'简单',normal:'普通',hard:'困难',deepseek:'DeepSeek'};
 let username=localStorage.getItem('df_name')||'观测者'+String(Math.floor(Math.random()*9000)+1000);
 localStorage.setItem('df_name',username);
-let screen='home',room=null,rooms=[],socket=null,retry=null,heartbeat=null,listTimer=null,entryTimer=null,entryExitTimer=null,connected=false,requesting=false,leaving=false,roomRevision=0,replayArchive=null,replayIndex=0,replayPlaying=false,replayTimer=null,observerEndPromptDismissed=false,observerReplaySaving=false,observerReplaySaveError='',observerReplayRetryDestination='room',observerSaveToastTimer=null,spectatorRoomView=false,roomDOMState=null,observerHistory=null,observerEventFilter='all',observerHistoryExpanded=false;
+let screen='home',room=null,rooms=[],socket=null,retry=null,heartbeat=null,listTimer=null,entryTimer=null,entryExitTimer=null,connected=false,requesting=false,leaving=false,roomRevision=0,replayArchive=null,replayIndex=0,replayPlaying=false,replayTimer=null,observerEndPromptDismissed=false,observerReplaySaving=false,observerReplaySaveError='',observerReplayRetryDestination='room',observerSaveToastTimer=null,spectatorRoomView=false,roomDOMState=null,observerHistory=null,observerHistoryExpanded=false;
+const observerEventTypes=new Set(),observerEventPlayers=new Set();
 const replayResumeKey='df_replay_resume';
 let replayResumeId=null;
 const sessionReady=fetch('/api/session',{credentials:'same-origin'}).then(async r=>{if(!r.ok)throw Error('联机服务器尚未启动，Demo 仍可试玩');return r.json();});
@@ -52,7 +54,7 @@ function setScreen(next) {
     entryTimer=setTimeout(()=>{entry.classList.add('leaving');arriving.classList.remove('table-arriving');entryExitTimer=setTimeout(()=>{entry.hidden=true;entry.classList.remove('leaving');},360);},820);
   }else{entry.hidden=true;entry.classList.remove('leaving');}
   if(next!=='table')suspendTable();
-  if(next!=='spectator'){observerPlayback.stop();observerHistory=null;observerEventFilter='all';observerHistoryExpanded=false;}
+  if(next!=='spectator'){observerPlayback.stop();observerHistory=null;observerEventTypes.clear();observerEventPlayers.clear();observerHistoryExpanded=false;}
   if(next!=='spectator'&&replayArchive){clearReplayTimer();replayPlaying=false;replayArchive=null;replayIndex=0;clearReplayResume();}
   window.scrollTo(0,0);
 }
@@ -284,6 +286,9 @@ document.addEventListener('click',e=>{
   const frame=e.target.closest('#spectator-app .observer-player');
   if(frame){const frames=[...document.querySelectorAll('#spectator-app .observer-player')],index=frames.indexOf(frame),member=room?.members[index];if(member?.accountId)social.profile(member.accountId);}
 });
+document.addEventListener('click',event=>{
+  for(const filter of document.querySelectorAll('#spectator-app .observer-filter[open]'))if(!filter.contains(event.target))filter.open=false;
+});
 
 const galaxyName=id=>GALAXIES.find(g=>g.id===id)?.name||'未知星系';
 const observerIcons={energy:'<path d="m10 1-7 9h5l-2 7 8-10H9z"/>',sun:'<circle cx="9" cy="9" r="3"/><path d="M9 0v3m0 12v3M0 9h3m12 0h3M3 3l2 2m8 8 2 2M3 15l2-2m8-8 2-2"/>',shield:'<path d="M9 1 2 4v5c0 4 7 8 7 8s7-4 7-8V4z"/>'};
@@ -357,6 +362,7 @@ function renderSpectator(view=room){
   const rosterScroll=root.querySelector('.observer-roster')?.scrollLeft||0;
   const seatScroll=new Map([...root.querySelectorAll('[data-observer-player]')].map(seat=>[seat.dataset.observerPlayer,{assets:seat.querySelector('.public-assets')?.scrollLeft||0,strikes:seat.querySelector('.player-strikes')?.scrollLeft||0,hand:seat.querySelector('.observer-hand-row')?.scrollTop||0}]));
   const priorLog=root.querySelector('.observer-history-list');
+  const openFilters=new Map([...root.querySelectorAll('.observer-filter[open]')].map(filter=>[filter.dataset.filter,filter.querySelector('.observer-filter-menu')?.scrollTop||0]));
   let historyAnchor=null;
   if(priorLog&&priorLog.scrollTop>1){
     const listRect=priorLog.getBoundingClientRect(),visible=[...priorLog.querySelectorAll('[data-event-key]')].find(row=>row.getBoundingClientRect().bottom>listRect.top+1);
@@ -374,21 +380,33 @@ function renderSpectator(view=room){
   observerHistory={roomId:room.id,count:allEvents.length,recent:recentEvents};
   const eventList=room.isReplay?allEvents:allEvents.slice(-60);
   const events=eventList.map(event=>{const signature=JSON.stringify(event),index=occurrences.get(signature)||0;occurrences.set(signature,index+1);return{event,key:`${hashEvent(signature)}-${index}`};}).reverse();
-  const filterOptions=Object.entries(eventNames).map(([type,label])=>`<option value="${esc(type)}"${observerEventFilter===type?' selected':''}>${esc(label)}</option>`).join('');
+  const eventByKey=new Map(events.map(({key,event})=>[key,event]));
+  const filterLabel=(name,selected)=>selected.size?`${name} · ${selected.size}`:`全部${name}`;
+  const filterMenu=(key,name,items,selected)=>`<details class="observer-filter" data-filter="${key}"${openFilters.has(key)?' open':''}><summary aria-label="按${name}筛选">${filterLabel(name,selected)}</summary><div class="observer-filter-menu"><button type="button" class="observer-filter-clear" data-filter-clear="${key}">显示全部${name}</button>${items.map(([value,label])=>`<label><input type="checkbox" data-filter-option="${key}" value="${esc(value)}"${selected.has(value)?' checked':''}><span>${esc(label)}</span></label>`).join('')}</div></details>`;
+  const filterOptions=filterMenu('type','事件',Object.entries(eventNames),observerEventTypes)+filterMenu('player','玩家',game.players.map(p=>[p.id,p.name]),observerEventPlayers);
   const legend=game.players.map(p=>`<span style="--observer-color:${observerColor(p.id,game)}"><i></i>${esc(p.name)}</span>`).join('');
   const split=Math.ceil(game.players.length/2),left=game.players.slice(0,split),right=game.players.slice(split);
   const playerColumn=(players,side)=>`<aside class="observer-player-column ${side}">${players.map(p=>observerPlayerHTML(p,game,strikesFor)).join('')}</aside>`;
   const replayControls=room.isReplay?`<div class="observer-replay-controls" aria-label="回放控制"><button id="replay-back-step" type="button" aria-label="回溯一步">←</button><button id="replay-toggle" type="button" aria-label="${replayPlaying?'暂停回放':'继续播放回放'}" aria-pressed="${replayPlaying}">${replayToggleIcon(replayPlaying)}</button><button id="replay-forward-step" type="button" aria-label="前进一步">→</button><label>第 <input id="replay-round" type="number" min="1" max="${Math.max(1,replayArchive?.rounds||game.round)}" value="${game.round}"> 轮</label><button id="replay-jump" type="button">跳转</button><small>${replayIndex+1} / ${replayArchive?.frames.length||1}</small></div>`:'';
   root.innerHTML=`<header class="observer-header"><div class="brand" aria-label="黑暗森林"><span class="brand-mark">◉</span><span><b>黑暗森林</b><small>THE DARK FOREST</small></span></div><div class="top-status"><span class="live-dot"></span>${room.isReplay?'对局回放':'在线房间'}<span class="status-separator"></span><span class="spectator-connect">${room.isReplay?'本地播放':connected?'实时同步':'连接中…'}</span></div><nav><button class="quiet-btn observer-exit" id="observer-exit">${room.isReplay?'退出回放':'退出观战'}</button></nav></header><div class="observer-room-toolbar${room.isReplay?' is-replay':''}"><div class="room-title"><span class="section-index">01 /</span><h1>${esc(room.name)}</h1><span class="pill">${room.isReplay?'回放':'在线房间'}</span></div>${replayControls}<div class="round-info"><span>第 ${String(game.round).padStart(2,'0')} 轮</span><span class="toolbar-divider"></span><b>${game.over?'对局结束':active?esc(active.name)+' 的回合':'状态同步中'}</b><span class="tiny-dot"></span>${game.pending?.kind==='broadcast'?`<small>广播回应中 · ${esc(galaxyName(game.pending.target))}</small>`:game.pending?.kind==='escape'?'<small>光速飞船逃生决策中</small>':''}</div></div>
-    <main class="observer-table-layout"><div class="observer-roster" aria-label="玩家列表，可横向滑动">${playerColumn(left,'left')}${playerColumn(right,'right')}</div><section class="observer-center-column${observerHistoryExpanded?' history-expanded':''}"><section class="observer-map-panel"><div class="observer-section-heading"><span>星图</span><small>公开坐标与星系状态</small></div><svg id="observer-map" viewBox="0 0 900 430" role="img" aria-label="显示全场玩家位置和打击目标的星图"></svg><div class="observer-map-legend" aria-label="玩家颜色说明">${legend}</div></section><div class="observer-playback-anchor"></div><section class="observer-history"><div class="observer-section-heading observer-history-heading"><span>公开事件记录</span><div class="observer-history-tools"><label class="observer-filter-label"><span>筛选</span><select id="observer-event-filter" aria-label="筛选事件类型"><option value="all">全部事件</option>${filterOptions}</select></label><button type="button" class="observer-history-expand" id="observer-history-expand" aria-pressed="${observerHistoryExpanded}" aria-label="${observerHistoryExpanded?'退出事件记录全屏':'全屏显示事件记录'}">${observerHistoryExpanded?'退出全屏':'全屏'}</button></div></div>${events.length?`<div class="observer-history-list">${events.map(({event:e,key},index)=>`<div class="event-row event-${esc(e.type)}${index<newEventCount?' event-arriving':''}" data-event-key="${key}" data-event-type="${esc(e.type)}"${observerEventFilter!=='all'&&observerEventFilter!==e.type?' hidden':''} style="--event-color:${eventColors[e.type]||'#aab5c3'}"><i></i><b class="event-tag">${e.round?`第 ${esc(e.round)} 轮 · `:''}${esc(eventNames[e.type]||'事件')}</b><div class="event-content"><span class="event-summary">${esc(eventLine(e))}</span>${eventDetails(e)}</div></div>`).join('')}</div>`:''}<p class="observer-history-empty" ${events.some(({event})=>observerEventFilter==='all'||event.type===observerEventFilter)?'hidden':''}>${events.length?'没有符合条件的事件。':'尚无公开事件。'}</p></section></section></main>`;
+    <main class="observer-table-layout"><div class="observer-roster" aria-label="玩家列表，可横向滑动">${playerColumn(left,'left')}${playerColumn(right,'right')}</div><section class="observer-center-column${observerHistoryExpanded?' history-expanded':''}"><section class="observer-map-panel"><div class="observer-section-heading"><span>星图</span><small>公开坐标与星系状态</small></div><svg id="observer-map" viewBox="0 0 900 430" role="img" aria-label="显示全场玩家位置和打击目标的星图"></svg><div class="observer-map-legend" aria-label="玩家颜色说明">${legend}</div></section><div class="observer-playback-anchor"></div><section class="observer-history"><div class="observer-section-heading observer-history-heading"><span>公开事件记录</span><div class="observer-history-tools">${filterOptions}<button type="button" class="observer-history-expand" id="observer-history-expand" aria-pressed="${observerHistoryExpanded}" aria-label="${observerHistoryExpanded?'退出事件记录全屏':'全屏显示事件记录'}">${observerHistoryExpanded?'退出全屏':'全屏'}</button></div></div>${events.length?`<div class="observer-history-list">${events.map(({event:e,key},index)=>`<div class="event-row event-${esc(e.type)}${index<newEventCount?' event-arriving':''}" data-event-key="${key}" data-event-type="${esc(e.type)}"${matchesObserverEvent(e,observerEventTypes,observerEventPlayers)?'':' hidden'} style="--event-color:${eventColors[e.type]||'#aab5c3'}"><i></i><b class="event-tag">${e.round?`第 ${esc(e.round)} 轮 · `:''}${esc(eventNames[e.type]||'事件')}</b><div class="event-content"><span class="event-summary">${esc(eventLine(e))}</span>${eventDetails(e)}</div></div>`).join('')}</div>`:''}<p class="observer-history-empty" ${events.some(({event})=>matchesObserverEvent(event,observerEventTypes,observerEventPlayers))?'hidden':''}>${events.length?'没有符合条件的事件。':'尚无公开事件。'}</p></section></section></main>`;
   const historySection=root.querySelector('.observer-history');
-  root.querySelector('#observer-event-filter').onchange=event=>{
-    observerEventFilter=event.target.value;
-    const rows=[...historySection.querySelectorAll('[data-event-type]')];
-    for(const row of rows)row.hidden=observerEventFilter!=='all'&&row.dataset.eventType!==observerEventFilter;
+  const applyEventFilters=()=>{
+    const rows=[...historySection.querySelectorAll('[data-event-key]')];
+    for(const row of rows)row.hidden=!matchesObserverEvent(eventByKey.get(row.dataset.eventKey),observerEventTypes,observerEventPlayers);
     historySection.querySelector('.observer-history-empty').hidden=rows.some(row=>!row.hidden);
-    if(historySection.querySelector('.observer-history-list'))historySection.querySelector('.observer-history-list').scrollTop=0;
+    const list=historySection.querySelector('.observer-history-list');if(list)list.scrollTop=0;
+    for(const filter of historySection.querySelectorAll('.observer-filter')){
+      const isPlayer=filter.dataset.filter==='player',selected=isPlayer?observerEventPlayers:observerEventTypes;
+      filter.querySelector('summary').textContent=filterLabel(isPlayer?'玩家':'事件',selected);
+    }
   };
+  for(const filter of historySection.querySelectorAll('.observer-filter')){
+    const isPlayer=filter.dataset.filter==='player',selected=isPlayer?observerEventPlayers:observerEventTypes;
+    const menu=filter.querySelector('.observer-filter-menu');if(openFilters.has(filter.dataset.filter))menu.scrollTop=openFilters.get(filter.dataset.filter);
+    filter.onchange=event=>{const input=event.target;if(!input.matches('[data-filter-option]'))return;const value=isPlayer?Number(input.value):input.value;if(input.checked)selected.add(value);else selected.delete(value);applyEventFilters();};
+    filter.querySelector('[data-filter-clear]').onclick=()=>{selected.clear();for(const input of filter.querySelectorAll('[data-filter-option]'))input.checked=false;applyEventFilters();};
+  }
   root.querySelector('#observer-history-expand').onclick=event=>{
     observerHistoryExpanded=!observerHistoryExpanded;
     root.querySelector('.observer-center-column').classList.toggle('history-expanded',observerHistoryExpanded);
