@@ -1,4 +1,5 @@
 import {validateReplayArchive,sanitizeReplayArchive} from './replay-archive.js';
+import {saveResumeArchive,loadResumeArchive,deleteResumeArchive} from './replay-resume.js?v=20261101-replay-resume1';
 import {launchDemo,launchOnline,receiveOnlineRoom,suspendTable} from './app.js?v=20261028-no-deepseek-dialog1';
 import {AI_NAMES} from './ai-labels.js';
 import {requestId} from './request-id.js';
@@ -13,6 +14,8 @@ const levels={easy:'简单',normal:'普通',hard:'困难',deepseek:'DeepSeek'};
 let username=localStorage.getItem('df_name')||'观测者'+String(Math.floor(Math.random()*9000)+1000);
 localStorage.setItem('df_name',username);
 let screen='home',room=null,rooms=[],socket=null,retry=null,heartbeat=null,listTimer=null,entryTimer=null,entryExitTimer=null,connected=false,requesting=false,leaving=false,roomRevision=0,replayArchive=null,replayIndex=0,replayPlaying=false,replayTimer=null,observerEndPromptDismissed=false,observerReplaySaving=false,observerReplaySaveError='',observerReplayRetryDestination='room',observerSaveToastTimer=null,spectatorRoomView=false,roomDOMState=null,observerHistory=null,observerEventFilter='all',observerHistoryExpanded=false;
+const replayResumeKey='df_replay_resume';
+let replayResumeId=null;
 const sessionReady=fetch('/api/session',{credentials:'same-origin'}).then(async r=>{if(!r.ok)throw Error('联机服务器尚未启动，Demo 仍可试玩');return r.json();});
 sessionReady.catch(()=>{});
 async function api(path,body) {
@@ -50,7 +53,7 @@ function setScreen(next) {
   }else{entry.hidden=true;entry.classList.remove('leaving');}
   if(next!=='table')suspendTable();
   if(next!=='spectator'){observerPlayback.stop();observerHistory=null;observerEventFilter='all';observerHistoryExpanded=false;}
-  if(next!=='spectator'&&replayArchive){clearReplayTimer();replayPlaying=false;replayArchive=null;replayIndex=0;}
+  if(next!=='spectator'&&replayArchive){clearReplayTimer();replayPlaying=false;replayArchive=null;replayIndex=0;clearReplayResume();}
   window.scrollTo(0,0);
 }
 function renderFriendsRoute(){
@@ -62,7 +65,7 @@ function renderReplayList(items=[]){
   if(screen!=='replays')return;
   const host=$('#replay-list');if(!host)return;
   host.innerHTML=items.length?items.map(item=>`<article class="replay-list-item"><div class="replay-list-info"><b>${esc(item.name)}</b><small>${replayDate(item.finishedAt)} · ${esc(item.rounds)} 轮 · ${esc(item.players?.map(p=>p.name).join('、')||'文明未知')}</small></div><div class="replay-list-actions"><button class="secondary-btn" data-download-replay="${esc(item.matchId)}">下载</button><button class="primary-btn" data-open-replay="${esc(item.matchId)}">观看</button></div></article>`).join(''):'<p class="replay-empty">还没有已完成的对局回放。参与或观战的在线对局结束后，系统会自动保存最近 5 局。</p>';
-  host.querySelectorAll('[data-open-replay]').forEach(button=>button.onclick=()=>task(async()=>{const data=await api('/replays/'+button.dataset.openReplay);startReplay(data.replay);}));
+  host.querySelectorAll('[data-open-replay]').forEach(button=>button.onclick=()=>task(async()=>{const data=await api('/replays/'+button.dataset.openReplay);await startReplay(data.replay);}));
   host.querySelectorAll('[data-download-replay]').forEach(button=>button.onclick=()=>task(async()=>{const data=await api('/replays/'+button.dataset.downloadReplay);downloadReplay(data.replay);}));
 }
 async function loadReplayList(){
@@ -78,7 +81,7 @@ function downloadReplay(replay){
 function renderReplaysRoute(){
   shell(`<div class="panel-topline"><span class="eyebrow">ACCOUNT / REPLAYS</span><button class="portal-link" id="replays-back">← 账号主页</button></div><h2>对局回放</h2><p>最近完成的 5 局会自动保存。回放可播放、逐步查看，也可下载后留存。</p><section class="replay-page"><div class="replay-page-heading"><b>已保存回放</b><small>本人参与或观战的在线对局</small></div><div id="replay-list" class="replay-list"><p class="replay-empty">正在读取回放…</p></div><div class="replay-import"><div><b>打开本地回放</b><small>选择之前下载的 JSON 回放文件</small></div><label class="secondary-btn" for="replay-file">选择文件</label><input id="replay-file" type="file" accept="application/json,.json" hidden></div><div id="replay-error" class="portal-error" role="status"></div></section>`,{wide:true,title:'重看每一步，\n记下星海回声。',subtitle:'所有公开行动、结算与星系变化，都按牌局顺序收录。'});
   $('#replays-back').onclick=()=>show('account');
-  $('#replay-file').onchange=async event=>{const file=event.target.files?.[0];if(!file)return;try{if(file.size>20*1024*1024)throw Error('回放文件超过 20 MB');const archive=JSON.parse(await file.text());validateReplayArchive(archive);startReplay(archive);}catch(error){$('#replay-error').textContent=error.message||'回放文件无法读取';}finally{event.target.value='';}};
+  $('#replay-file').onchange=async event=>{const file=event.target.files?.[0];if(!file)return;try{if(file.size>20*1024*1024)throw Error('回放文件超过 20 MB');const archive=JSON.parse(await file.text());validateReplayArchive(archive);await startReplay(archive);}catch(error){$('#replay-error').textContent=error.message||'回放文件无法读取';}finally{event.target.value='';}};
   void loadReplayList();
 }
 function replayView(index){
@@ -100,10 +103,27 @@ function setReplayIndex(index,{animate=false}={}){
 const replayToggleIcon=playing=>playing
   ?'<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 4h4v12H5zM11 4h4v12h-4z"/></svg>'
   :'<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M6 3.5 16 10 6 16.5z"/></svg>';
-function startReplay(archive){
-  validateReplayArchive(archive);clearReplayTimer();observerPlayback.stop();replayArchive=sanitizeReplayArchive(archive);replayIndex=0;replayPlaying=true;setScreen('spectator');observerPlayback.reset(replayView(0));scheduleReplay();
+function clearReplayResume(){
+  const id=replayResumeId;replayResumeId=null;
+  try{sessionStorage.removeItem(replayResumeKey);}catch{/* Browser storage can be unavailable. */}
+  if(id)void deleteResumeArchive(id).catch(()=>{});
 }
-function leaveReplay(){clearReplayTimer();replayPlaying=false;replayArchive=null;replayIndex=0;observerPlayback.stop();show('replays');}
+function saveReplayProgress(index){
+  if(!replayResumeId)return;
+  try{sessionStorage.setItem(replayResumeKey,JSON.stringify({id:replayResumeId,index,playing:replayPlaying}));}catch{/* Playback continues if storage is unavailable. */}
+}
+async function startReplay(archive,{index=0,playing=true,resumeId=null}={}){
+  validateReplayArchive(archive);const clean=sanitizeReplayArchive(archive);
+  let cacheFailed=false;
+  if(!resumeId){
+    const id=crypto.randomUUID();
+    try{await saveResumeArchive(id,clean);sessionStorage.setItem(replayResumeKey,JSON.stringify({id,index:0,playing:true}));resumeId=id;}
+    catch{cacheFailed=true;void deleteResumeArchive(id).catch(()=>{});}
+  }
+  clearReplayTimer();observerPlayback.stop();replayResumeId=resumeId;replayArchive=clean;replayIndex=Math.max(0,Math.min(clean.frames.length-1,Number.isInteger(index)?index:0));replayPlaying=Boolean(playing);setScreen('spectator');observerPlayback.reset(replayView(replayIndex));if(replayPlaying)scheduleReplay();
+  if(cacheFailed)observerSaveToast('浏览器无法保存回放进度，刷新后需重新打开');
+}
+function leaveReplay(){clearReplayTimer();replayPlaying=false;replayArchive=null;replayIndex=0;clearReplayResume();observerPlayback.stop();show('replays');}
 function bindReplayControls(){
   if(!replayArchive)return;
   const root=$('#spectator-app'),play=root.querySelector('#replay-toggle'),back=root.querySelector('#replay-back-step'),forward=root.querySelector('#replay-forward-step'),input=root.querySelector('#replay-round'),jump=root.querySelector('#replay-jump');
@@ -293,6 +313,7 @@ function renderSpectator(view=room){
   const room=view;
   const root=$('#spectator-app');if(!root||!room||(room.role!=='spectator'&&!room.isReplay))return;
   if(!room.game){if(!room.isReplay){setScreen('room');renderRoom();}return;}
+  if(room.isReplay&&replayArchive)saveReplayProgress(room.revision-1);
   const game=room.game,byId=id=>game.players.find(p=>p.id===id),strikesFor=id=>game.strikes.filter(s=>s.owner===id);
   if(!game.over){observerEndPromptDismissed=false;observerReplaySaveError='';}
   const observerEndActions=observerReplaySaveError
@@ -440,9 +461,22 @@ document.addEventListener('portal:home',()=>show('home'));
 document.addEventListener('portal:exit',()=>task(async()=>{if(!room){show('home');return;}const id=room.id;leaving=true;try{await api('/rooms/'+id+'/leave',{requestId:requestId()});disconnect();room=null;localStorage.removeItem('df_room');show('home');}catch(error){leaving=false;throw error;}finally{leaving=false;}}));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&room&&!replayArchive)api('/rooms/'+room.id).then(handleState).catch(()=>{});});
 show('home');
+async function restoreReplay(){
+  try{
+    const saved=JSON.parse(sessionStorage.getItem(replayResumeKey)||'null');
+    if(!saved||typeof saved.id!=='string'||!/^[a-f0-9-]{36}$/.test(saved.id))return false;
+    const archive=await loadResumeArchive(saved.id);
+    if(!archive){sessionStorage.removeItem(replayResumeKey);return false;}
+    if(screen!=='home'||replayArchive)return false;
+    await startReplay(archive,{index:saved.index,playing:saved.playing===true,resumeId:saved.id});return true;
+  }catch{if(screen==='home')errorMessage(Error('无法恢复回放，请从回放列表或文件重新打开'));return false;}
+}
+const replayRestore=restoreReplay();
 sessionReady.then(async result=>{
+  await replayRestore;
   social.init(result.account);if(result.account){username=result.account.name;localStorage.setItem('df_name',username);if(screen==='home'||screen==='settings'||screen==='account'||screen==='friends')show(screen);}
+  if(replayArchive)return;
   let saved=localStorage.getItem('df_room');
   if(result.account&&!saved){const state=await api('/social/state');saved=state.currentRoom;}
-  if(result.account&&saved&&/^(?:[A-Z0-9]{6}|[a-f0-9]{8})$/.test(saved))try{openRoom(await api('/rooms/'+saved));}catch{localStorage.removeItem('df_room');}
+  if(result.account&&saved&&/^(?:[A-Z0-9]{6}|[a-f0-9]{8})$/.test(saved))try{const resumed=await api('/rooms/'+saved);if(!replayArchive)openRoom(resumed);}catch{localStorage.removeItem('df_room');}
 }).catch(()=>{});
