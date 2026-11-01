@@ -2,6 +2,12 @@ import {CARDS,GALAXIES,COLORS} from './game.js';
 import {cardFlight,cardInto,pause,reducedMotion} from './card-motion.js?v=20261025-observer-motion';
 import {strikeFeedback} from './view-model.js?v=20261025-green-loss-mark';
 
+export function productionGain(event,game){
+  if(Number.isFinite(event.gain)&&event.gain>=0)return event.gain;
+  const record=(game.publicEvents||[]).findLast(e=>e.type==='production'&&e.actor===event.player&&e.round===game.round&&e.turnIndex===game.turnIndex);
+  return Number.isFinite(record?.gain)&&record.gain>=0?record.gain:null;
+}
+
 // Never coalesce successive snapshots: response + automatic settlement can arrive together,
 // and fast human actions must remain visible in the same server order as AI actions.
 export class OrderedStatePlayback {
@@ -220,14 +226,15 @@ export function createSpectatorPlayback({render,renderPlayer,onError}){
         }else if(e.type==='system_hit'||e.type==='miss'){
           label(`${galaxy(e.target)} · ${e.type==='miss'?'没有文明受击':arriving?.card.key==='dimension'?'星系已被降维':'恒星已熄灭'}`,arriving?.owner);
         }else if(e.type==='production'){
-          label(`${named(e.player)} 回合开始 · 产能 +${e.gain}`,e.player);
+          const gain=productionGain(e,next.game);
+          label(`${named(e.player)} 回合开始${gain===null?'':` · 产能 +${gain}`}`,e.player);
         }else if(e.type==='gameover'){
           label(e.winner===null?'对局结束 · 无文明幸存':`对局结束 · ${named(e.winner)} 获胜`,e.winner);
         }
       }
       if(abort.aborted)return;
       for(const change of batch.energyChanges||[])energy(change);
-      if(batch.energyChanges?.length)tray.querySelector('.observer-play-status').textContent+=' · '+batch.energyChanges.map(c=>`${named(c.player)} ${c.after-c.before>0?'+':''}${c.after-c.before}`).join(' / ');
+      if(batch.energyChanges?.length)tray.querySelector('.observer-play-status').textContent+=' · 能量变化：'+batch.energyChanges.map(c=>`${named(c.player)} ${c.after-c.before>0?'+':''}${c.after-c.before}`).join(' / ');
     }
     if(refreshLatest)syncLatest(next);
   }

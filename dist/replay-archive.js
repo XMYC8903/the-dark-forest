@@ -41,6 +41,7 @@ export function sanitizeReplayArchive(source){
       if(Array.isArray(event.cards))out.cards=event.cards.map((card,j)=>safeCard(card,`replay-batch-${frameIndex}-${i}-${j}`)).filter(Boolean);
       if(event.strikeId)out.strikeId=/^[A-Za-z0-9_-]{1,80}$/.test(String(event.strikeId))?String(event.strikeId):'';
       if(['photon','annihilation','dimension'].includes(event.key))out.key=event.key;
+      if(event.type==='production'&&Number.isFinite(event.gain)&&event.gain>=0)out.gain=Math.min(100000,event.gain);
       if(event.type==='defended'&&Array.isArray(event.cards))out.cards=event.cards.map((card,j)=>safeCard(card,`replay-defense-${frameIndex}-${i}-${j}`)).filter(Boolean);
       return out;
     }).filter(Boolean);

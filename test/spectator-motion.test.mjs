@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {Game} from '../shared/game.js';
 import {newRoom,applyGameAction,roomView,mutateRoom} from '../server/room-core.js';
 import {GameRoom} from '../server/worker.js';
-import {OrderedStatePlayback} from '../dist/spectator-motion.js';
+import {OrderedStatePlayback,productionGain} from '../dist/spectator-motion.js';
 import {nextAIActionAt} from '../server/ai-timing.js';
 
 function fixture(){
@@ -12,6 +12,13 @@ function fixture(){
   for(const p of room.game.players){room.game.discard.push(...p.hand.splice(0),...p.builds.splice(0));p.energy=12;}
   return room;
 }
+test('回合产能优先取动画数值，旧回放从同回合公开记录恢复',()=>{
+  const game={round:8,turnIndex:12,publicEvents:[{type:'production',actor:1,round:7,turnIndex:9,gain:9},{type:'production',actor:1,round:8,turnIndex:12,gain:2}]};
+  assert.equal(productionGain({player:1,gain:4},game),4);
+  assert.equal(productionGain({player:1},game),2);
+  assert.equal(productionGain({player:0},game),null);
+  assert.equal(productionGain({player:1}, {...game,turnIndex:13}),null);
+});
 test('广播回应与同一请求内自动结算按服务器顺序保留，仅观战出口获得动画数据',()=>{
   const room=fixture(),g=room.game,caster=g.take('stellar_c'),response=g.take('hyper_c');
   g.players[0].hand.push(caster);g.players[1].hand.push(response);

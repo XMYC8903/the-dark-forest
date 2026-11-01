@@ -1,4 +1,4 @@
-import {validateReplayArchive,sanitizeReplayArchive} from './replay-archive.js';
+import {validateReplayArchive,sanitizeReplayArchive} from './replay-archive.js?v=20261101-production-fix1';
 import {saveResumeArchive,loadResumeArchive,deleteResumeArchive} from './replay-resume.js?v=20261101-replay-resume1';
 import {matchesObserverEvent} from './observer-event-filter.js?v=20261101-history-filters1';
 import {launchDemo,launchOnline,receiveOnlineRoom,suspendTable} from './app.js?v=20261028-no-deepseek-dialog1';
@@ -6,7 +6,7 @@ import {AI_NAMES} from './ai-labels.js';
 import {requestId} from './request-id.js';
 import {CARDS,GALAXIES,EDGES} from './game.js';
 import {summarizeBuildings} from './view-model.js?v=20261025-green-loss-mark';
-import {createSpectatorPlayback} from './spectator-motion.js?v=20261028-energy-anchor1';
+import {createSpectatorPlayback} from './spectator-motion.js?v=20261101-production-fix1';
 import {createSocial} from './social.js?v=20261026-account-layout3';
 
 const $=s=>document.querySelector(s);
