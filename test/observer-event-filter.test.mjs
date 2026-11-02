@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EVENT_FILTER_CATEGORIES,eventPlayerIds,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel} from '../dist/observer-event-filter.js';
+import {EVENT_FILTER_CATEGORIES,deduplicatePublicHistoryEvents,eventPlayerIds,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel} from '../dist/observer-event-filter.js';
+import {gatherIntel} from '../server/room-core.js';
 
 test('event and player selections combine and empty selections include all',()=>{
   const event={type:'impact',actor:0,victim:2,target:5};
@@ -42,4 +43,27 @@ test('公开记录仅展示指定分类，不展示弃牌、撤回打击、对�
     assert.equal(matchesObserverEvent(event,new Set(['energy']),new Set()),false);
   }
   for(const type of ['build','broadcast_published','broadcast_settled','broadcast','launch','impact','system_hit','damage','miss','lock','escaped','eliminated','production'])assert.equal(isPublicHistoryEvent({type}),true,type);
+});
+
+test('同一枚打击的结算和落空记录只展示结算，独立打击仍保留',()=>{
+  const room={game:{round:8,turnIndex:23,players:[]},intel:[]};
+  gatherIntel(room,[
+    {type:'strike_arriving',owner:0,target:4,strikeId:'strike-a',card:{key:'nuke'}},
+    {type:'strike_resolved',owner:0,target:4,key:'nuke',strikeId:'strike-a',progress:3,outcome:'miss'},
+    {type:'miss',target:4}
+  ]);
+  assert.deepEqual(room.intel.map(event=>event.type),['impact','miss']);
+  const deduped=deduplicatePublicHistoryEvents(room.intel);
+  assert.equal(deduped.length,1);assert.equal(deduped[0].progress,3);
+  const unrelated={...room.intel[1],strikeId:'strike-b'};
+  assert.deepEqual(deduplicatePublicHistoryEvents([room.intel[0],unrelated]),[room.intel[0],unrelated]);
+  const standalone={...room.intel[1],strikeId:undefined};
+  assert.deepEqual(deduplicatePublicHistoryEvents([room.intel[0],standalone]),[room.intel[0],standalone]);
+});
+
+test('同一枚打击的星系效果与结算只展示一条',()=>{
+  const impact={type:'impact',strikeId:'strike-a',round:2,turnIndex:4,outcome:'hit'};
+  const effect={type:'system_hit',strikeId:'strike-a',round:2,turnIndex:4};
+  assert.deepEqual(deduplicatePublicHistoryEvents([impact,effect]),[impact]);
+  assert.deepEqual(deduplicatePublicHistoryEvents([impact,{...effect,turnIndex:5}]),[impact,{...effect,turnIndex:5}]);
 });

@@ -26,6 +26,16 @@ export function isPublicHistoryEvent(event){
   return historyEventTypes.has(event.type)&&observerEventCategories(event).size>0;
 }
 
+export function deduplicatePublicHistoryEvents(events){
+  const result=[];
+  for(const event of events){
+    const prior=result.at(-1),expected=event.type==='miss'?'miss':event.type==='system_hit'?'hit':null;
+    if(expected&&event.strikeId&&prior?.type==='impact'&&prior.outcome===expected&&prior.strikeId===event.strikeId&&prior.round===event.round&&prior.turnIndex===event.turnIndex)continue;
+    result.push(event);
+  }
+  return result;
+}
+
 export function eventPlayerIds(event){
   const ids=new Set();
   const add=id=>{if(Number.isInteger(id)&&id>=0)ids.add(id);};
