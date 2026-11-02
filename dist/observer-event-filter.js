@@ -10,9 +10,9 @@ export function observerEventCategories(event){
   const categories=new Set();
   if(['build','broadcast_published','broadcast_settled','launch','lock','escaped','eliminated'].includes(event.type))categories.add(event.type);
   if(event.type==='broadcast')categories.add('broadcast_published');
-  if(event.type==='impact')categories.add(event.outcome==='survived'?'defense':event.outcome==='miss'?'miss':'impact_hit');
-  if(['system_hit','damage'].includes(event.type))categories.add('impact_hit');
-  if(event.type==='miss')categories.add('miss');
+  if(event.type==='impact')categories.add(event.outcome==='survived'?'defense':event.outcome==='miss'||event.outcome==='hit'&&event.victim==null?'miss':'impact_hit');
+  if(event.type==='damage')categories.add('impact_hit');
+  if(['miss','system_hit'].includes(event.type))categories.add('miss');
   if(event.type==='production'||event.type==='lock'||event.type==='escaped'||Number(event.cost)>0||(event.energyChanges||[]).some(change=>change.before!==change.after))categories.add('energy');
   return categories;
 }
