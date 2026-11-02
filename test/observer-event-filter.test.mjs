@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EVENT_FILTER_CATEGORIES,eventPlayerIds,matchesObserverEvent,observerEventCategories} from '../dist/observer-event-filter.js';
+import {EVENT_FILTER_CATEGORIES,eventPlayerIds,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel} from '../dist/observer-event-filter.js';
 
 test('event and player selections combine and empty selections include all',()=>{
   const event={type:'impact',actor:0,victim:2,target:5};
@@ -18,6 +18,12 @@ test('打击结算按结果分类，能量变化可与其他分类重叠',()=>{
   assert.equal(matchesObserverEvent({type:'production'},new Set(['energy']),new Set()),true);
   assert.equal(matchesObserverEvent({type:'broadcast_settled',energyChanges:[{before:1,after:4}]},new Set(['energy']),new Set()),true);
   assert.equal(matchesObserverEvent({type:'build',cost:3},new Set(['build','energy']),new Set()),true);
+  assert.equal(observerEventCategoryLabel({type:'impact',outcome:'survived'}),'防御打击');
+  assert.equal(observerEventCategoryLabel({type:'impact',outcome:'escaped'}),'打击落空');
+  assert.equal(observerEventCategoryLabel({type:'system_hit'}),'打击命中');
+  assert.equal(observerEventCategoryLabel({type:'production'}),'能量变化');
+  assert.equal(observerEventCategoryLabel({type:'build',cost:3}),'建设');
+  assert.equal(observerEventCategoryLabel({type:'gameover'}),null);
 });
 
 test('player matching includes broadcast participants and winners without interpreting galaxies as players',()=>{

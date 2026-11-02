@@ -15,6 +15,11 @@ export function observerEventCategories(event){
   return categories;
 }
 
+export function observerEventCategoryLabel(event){
+  const category=observerEventCategories(event).values().next().value;
+  return EVENT_FILTER_CATEGORIES.find(([key])=>key===category)?.[1]||null;
+}
+
 export function eventPlayerIds(event){
   const ids=new Set();
   const add=id=>{if(Number.isInteger(id)&&id>=0)ids.add(id);};
