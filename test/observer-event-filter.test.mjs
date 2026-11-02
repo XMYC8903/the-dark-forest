@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EVENT_FILTER_CATEGORIES,eventPlayerIds,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel} from '../dist/observer-event-filter.js';
+import {EVENT_FILTER_CATEGORIES,eventPlayerIds,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel} from '../dist/observer-event-filter.js';
 
 test('event and player selections combine and empty selections include all',()=>{
   const event={type:'impact',actor:0,victim:2,target:5};
@@ -31,5 +31,15 @@ test('player matching includes broadcast participants and winners without interp
   assert.deepEqual([...eventPlayerIds(event)],[0,1,2,4]);
   assert.equal(matchesObserverEvent(event,new Set(),new Set([2])),true);
   assert.equal(matchesObserverEvent(event,new Set(),new Set([3])),false);
-  assert.equal(matchesObserverEvent({type:'gameover',winner:3},new Set(),new Set([3])),true);
+  assert.deepEqual([...eventPlayerIds({type:'gameover',winner:3})],[3]);
+});
+
+test('公开记录仅展示指定分类，不展示弃牌、撤回打击、对局结束等事件',()=>{
+  for(const type of ['discard','withdraw','gameover','unknown']){
+    const event={type,cost:1,energyChanges:[{before:2,after:1}]};
+    assert.equal(isPublicHistoryEvent(event),false);
+    assert.equal(matchesObserverEvent(event,new Set(),new Set()),false);
+    assert.equal(matchesObserverEvent(event,new Set(['energy']),new Set()),false);
+  }
+  for(const type of ['build','broadcast_published','broadcast_settled','broadcast','launch','impact','system_hit','damage','miss','lock','escaped','eliminated','production'])assert.equal(isPublicHistoryEvent({type}),true,type);
 });

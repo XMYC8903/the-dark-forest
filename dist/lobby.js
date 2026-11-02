@@ -1,6 +1,6 @@
 import {validateReplayArchive,sanitizeReplayArchive} from './replay-archive.js?v=20261101-production-fix1';
 import {saveResumeArchive,loadResumeArchive,deleteResumeArchive} from './replay-resume.js?v=20261101-replay-resume1';
-import {EVENT_FILTER_CATEGORIES,matchesObserverEvent,observerEventCategoryLabel} from './observer-event-filter.js?v=20261102-history-categories2';
+import {EVENT_FILTER_CATEGORIES,isPublicHistoryEvent,matchesObserverEvent,observerEventCategoryLabel} from './observer-event-filter.js?v=20261102-history-categories3';
 import {launchDemo,launchOnline,receiveOnlineRoom,suspendTable} from './app.js?v=20261028-no-deepseek-dialog1';
 import {AI_NAMES} from './ai-labels.js';
 import {requestId} from './request-id.js';
@@ -376,10 +376,12 @@ function renderSpectator(view=room){
   if(observerHistory?.roomId===room.id&&allEvents.length>=observerHistory.count){
     const previous=observerHistory.recent;let overlap=Math.min(previous.length,recentEvents.length);
     while(overlap>0&&!previous.slice(-overlap).every((event,index)=>event===recentEvents[index]))overlap--;
-    newEventCount=Math.min(3,recentEvents.length-overlap);
+    const appended=recentEvents.length-overlap;
+    newEventCount=appended?Math.min(3,allEvents.slice(-appended).filter(isPublicHistoryEvent).length):0;
   }
   observerHistory={roomId:room.id,count:allEvents.length,recent:recentEvents};
-  const eventList=room.isReplay?allEvents:allEvents.slice(-60);
+  const visibleEvents=allEvents.filter(isPublicHistoryEvent);
+  const eventList=room.isReplay?visibleEvents:visibleEvents.slice(-60);
   const events=eventList.map(event=>{const signature=JSON.stringify(event),index=occurrences.get(signature)||0;occurrences.set(signature,index+1);return{event,key:`${hashEvent(signature)}-${index}`};}).reverse();
   const eventByKey=new Map(events.map(({key,event})=>[key,event]));
   const filterLabel=(name,selected)=>selected.size?`${name} · ${selected.size}`:`全部${name}`;
