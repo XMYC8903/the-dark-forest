@@ -1,3 +1,20 @@
+export const EVENT_FILTER_CATEGORIES=[
+  ['build','建设'],['broadcast_published','广播发布'],['broadcast_settled','广播结算'],
+  ['launch','打击发射'],['impact_hit','打击命中'],['defense','防御打击'],['miss','打击落空'],
+  ['lock','科技锁死'],['escaped','光速跃迁'],['eliminated','文明消逝'],['energy','能量变化']
+];
+
+export function observerEventCategories(event){
+  const categories=new Set();
+  if(['build','broadcast_published','broadcast_settled','launch','lock','escaped','eliminated'].includes(event.type))categories.add(event.type);
+  if(event.type==='broadcast')categories.add('broadcast_published');
+  if(event.type==='impact')categories.add(event.outcome==='survived'?'defense':['miss','escaped'].includes(event.outcome)?'miss':'impact_hit');
+  if(['system_hit','damage'].includes(event.type))categories.add('impact_hit');
+  if(event.type==='miss')categories.add('miss');
+  if(event.type==='production'||event.type==='lock'||event.type==='escaped'||Number(event.cost)>0||(event.energyChanges||[]).some(change=>change.before!==change.after))categories.add('energy');
+  return categories;
+}
+
 export function eventPlayerIds(event){
   const ids=new Set();
   const add=id=>{if(Number.isInteger(id)&&id>=0)ids.add(id);};
@@ -8,7 +25,7 @@ export function eventPlayerIds(event){
 }
 
 export function matchesObserverEvent(event,types,players){
-  if(types.size&&!types.has(event.type))return false;
+  if(types.size&&![...observerEventCategories(event)].some(type=>types.has(type)))return false;
   if(!players.size)return true;
   const participants=eventPlayerIds(event);
   return [...players].some(id=>participants.has(id));

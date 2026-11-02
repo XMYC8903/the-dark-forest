@@ -1,6 +1,6 @@
 import {validateReplayArchive,sanitizeReplayArchive} from './replay-archive.js?v=20261101-production-fix1';
 import {saveResumeArchive,loadResumeArchive,deleteResumeArchive} from './replay-resume.js?v=20261101-replay-resume1';
-import {matchesObserverEvent} from './observer-event-filter.js?v=20261101-history-filters1';
+import {EVENT_FILTER_CATEGORIES,matchesObserverEvent} from './observer-event-filter.js?v=20261102-history-categories1';
 import {launchDemo,launchOnline,receiveOnlineRoom,suspendTable} from './app.js?v=20261028-no-deepseek-dialog1';
 import {AI_NAMES} from './ai-labels.js';
 import {requestId} from './request-id.js';
@@ -384,7 +384,7 @@ function renderSpectator(view=room){
   const eventByKey=new Map(events.map(({key,event})=>[key,event]));
   const filterLabel=(name,selected)=>selected.size?`${name} · ${selected.size}`:`全部${name}`;
   const filterMenu=(key,name,items,selected)=>`<details class="observer-filter" data-filter="${key}"${openFilters.has(key)?' open':''}><summary aria-label="按${name}筛选">${filterLabel(name,selected)}</summary><div class="observer-filter-menu"><button type="button" class="observer-filter-clear" data-filter-clear="${key}">显示全部${name}</button>${items.map(([value,label])=>`<label><input type="checkbox" data-filter-option="${key}" value="${esc(value)}"${selected.has(value)?' checked':''}><span>${esc(label)}</span></label>`).join('')}</div></details>`;
-  const filterOptions=filterMenu('type','事件',Object.entries(eventNames),observerEventTypes)+filterMenu('player','玩家',game.players.map(p=>[p.id,p.name]),observerEventPlayers);
+  const filterOptions=filterMenu('type','事件',EVENT_FILTER_CATEGORIES,observerEventTypes)+filterMenu('player','玩家',game.players.map(p=>[p.id,p.name]),observerEventPlayers);
   const legend=game.players.map(p=>`<span style="--observer-color:${observerColor(p.id,game)}"><i></i>${esc(p.name)}</span>`).join('');
   const split=Math.ceil(game.players.length/2),left=game.players.slice(0,split),right=game.players.slice(split);
   const playerColumn=(players,side)=>`<aside class="observer-player-column ${side}">${players.map(p=>observerPlayerHTML(p,game,strikesFor)).join('')}</aside>`;
