@@ -1,14 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EVENT_FILTER_CATEGORIES,deduplicatePublicHistoryEvents,eventPlayerIds,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel} from '../dist/observer-event-filter.js';
+import {EVENT_FILTER_CATEGORIES,deduplicatePublicHistoryEvents,eventPlayerIds,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel,observerEventRoles} from '../dist/observer-event-filter.js';
 import {gatherIntel} from '../server/room-core.js';
 
 test('event and player selections combine and empty selections include all',()=>{
   const event={type:'impact',actor:0,victim:2,target:5};
   assert.equal(matchesObserverEvent(event,new Set(),new Set()),true);
-  assert.equal(matchesObserverEvent(event,new Set(['build','impact_hit']),new Set([2,4])),true);
+  assert.equal(matchesObserverEvent(event,new Set(['build','impact_hit']),new Set([0,4]),new Set([2])),true);
   assert.equal(matchesObserverEvent(event,new Set(['build']),new Set([0])),false);
   assert.equal(matchesObserverEvent(event,new Set(['impact_hit']),new Set([5])),false);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set([2])),false);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set(),new Set([2])),true);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set([0]),new Set([0])),false);
 });
 
 test('打击结算按结果分类，能量变化可与其他分类重叠',()=>{
@@ -34,11 +37,18 @@ test('打击结算按结果分类，能量变化可与其他分类重叠',()=>{
   assert.equal(observerEventCategoryLabel({type:'gameover'}),null);
 });
 
-test('player matching includes broadcast participants and winners without interpreting galaxies as players',()=>{
-  const event={type:'broadcast_settled',actor:0,selected:1,target:3,cards:[{actor:0},{actor:2}],energyChanges:[{player:4}]};
-  assert.deepEqual([...eventPlayerIds(event)],[0,1,2,4]);
-  assert.equal(matchesObserverEvent(event,new Set(),new Set([2])),true);
-  assert.equal(matchesObserverEvent(event,new Set(),new Set([3])),false);
+test('按发起者和目标筛选，并且不将回应者或星系误判为目标',()=>{
+  const event={type:'broadcast_settled',actor:0,selected:2,target:3,targetPlayerId:1,cards:[{actor:0},{actor:2}],energyChanges:[{player:4}]};
+  assert.deepEqual([...eventPlayerIds(event)],[0,2,1,4]);
+  assert.deepEqual([...observerEventRoles(event).initiators],[0]);
+  assert.deepEqual([...observerEventRoles(event).targets],[1]);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set([0]),new Set([1])),true);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set(),new Set([2])),false);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set(),new Set([3])),false);
+  assert.equal(matchesObserverEvent({type:'launch',actor:0,target:3},new Set(),new Set(),new Set([3])),false);
+  assert.equal(matchesObserverEvent({type:'broadcast_settled',actor:0,selected:2,target:3},new Set(),new Set(),new Set([2])),false);
+  assert.deepEqual([...observerEventRoles({type:'eliminated',actor:2}).targets],[2]);
+  assert.equal(observerEventRoles({type:'eliminated',actor:2}).initiators.size,0);
   assert.deepEqual([...eventPlayerIds({type:'gameover',winner:3})],[3]);
 });
 

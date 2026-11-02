@@ -69,7 +69,13 @@ export function roomView(room,sessionId) {
   return {...roomSummary(room),revision:room.revision,me:isSpectator?null:me,role:isSpectator?'spectator':'player',isHost:room.host===sessionId,spectatorOccupied:spectators.length>0,
     members:room.members.map((p,index)=>({index,name:p.name,accountId:p.accountId||null,bot:p.bot,exited:Boolean(p.exited),host:p.id===room.host})),
     ...(isSpectator?{spectators:spectators.map(p=>({name:p.name,me:p.id===sessionId}))}:{}),
-    game:room.game?(isSpectator?{...spectatorGameView(room.game,room.intel),motionBatches:structuredClone(room.motionBatches||[])}:gameView(room.game,me)):null};
+    game:room.game?(isSpectator?{...spectatorGameView(room.game,room.intel,room.observerIntelTargets),motionBatches:structuredClone(room.motionBatches||[])}:gameView(room.game,me)):null};
+}
+export function observerIntelView(intel=[],targets={},start=0){
+  return intel.slice(start).map((event,index)=>{
+    const key=start+index;
+    return {...event,...(Object.hasOwn(targets,key)?{targetPlayerId:targets[key]}:{})};
+  });
 }
 function spectatorCard(card,{full=false}={}) {
   const d=CARDS[card.key];
@@ -80,7 +86,7 @@ function spectatorCard(card,{full=false}={}) {
     ...(d.income?{income:d.income}:{}),...(d.defense?{defense:d.defense}:{}),
     ...(full?{key:card.key,face:d.face||null,rule:d.rule,detail:d.detail}:{} )};
 }
-export function spectatorGameView(game,intel=[]) {
+export function spectatorGameView(game,intel=[],observerTargets={}) {
   const publicCard=(card,extra={})=>({...spectatorCard(card,{full:true}),...extra});
   let pending=null;
   if(game.pending?.kind==='broadcast'){
@@ -93,7 +99,7 @@ export function spectatorGameView(game,intel=[]) {
     players:game.players.map(p=>({id:p.id,name:p.name,alive:p.alive,energy:p.energy,galaxy:p.galaxy,escapeUsed:p.escapeUsed,
       hand:p.hand.map(card=>({...spectatorCard(card),face:CARDS[card.key]?.face||null})),builds:p.builds.map(card=>spectatorCard(card,{full:true}))})),
     strikes:game.strikes.map(s=>({id:s.id,card:spectatorCard(s.card,{full:true}),owner:s.owner,target:s.target,progress:s.progress,required:s.required})),
-    publicEvents:intel.slice(-100).map(event=>({...event,...(event.key?{cardName:CARDS[event.key]?.name||'未知卡牌'}:{})})),
+    publicEvents:observerIntelView(intel,observerTargets,Math.max(0,intel.length-100)).map(event=>({...event,...(event.key?{cardName:CARDS[event.key]?.name||'未知卡牌'}:{})})),
     latest:game.latest?{kind:game.latest.kind,target:game.latest.target,revealed:game.latest.revealed,outcome:game.latest.outcome,victimId:game.latest.victimId,
       cards:game.latest.cards.map(c=>publicCard(c,{actor:c.actor,role:c.role}))}:null};
 }
@@ -171,6 +177,7 @@ export function appendDeepSeekUpdates(room) {
 }
 export function gatherIntel(room,events,batch={}) {
   const game=room.game,energyChanges=batch.energyChanges||[],round=game.round,turnIndex=game.turnIndex;
+  const firstEvent=room.intel.length;
   const cardName=key=>CARDS[key]?.name||'未知卡牌';
   const publicCards=(cards,defaultActor=null,defaultRole=null)=>(cards||[]).map(c=>({actor:c.actor??defaultActor,key:c.key,cardName:cardName(c.key),role:c.role||defaultRole,face:CARDS[c.key]?.face||null,cost:CARDS[c.key]?.cost||0}));
   let arriving=null;
@@ -191,6 +198,13 @@ export function gatherIntel(room,events,batch={}) {
     else if(e.type==='production')room.intel.push({type:'production',actor:e.player,gain:e.gain,round,turnIndex});
     else if(e.type==='gameover')room.intel.push({type:'gameover',winner:e.winner,round,turnIndex});
     else if(e.type==='withdraw')room.intel.push({type:'withdraw',actor:e.player,strikeId:e.strikeId,round,turnIndex});
+  }
+  // Keep target locations out of the public intelligence used by player AI.
+  for(let i=firstEvent;i<room.intel.length;i++){
+    const entry=room.intel[i];
+    if(!['broadcast_published','broadcast_settled','launch'].includes(entry.type))continue;
+    room.observerIntelTargets||={};
+    room.observerIntelTargets[i]=game.players.find(p=>p.alive&&p.galaxy===entry.target)?.id??null;
   }
   // A broadcast response's face is withheld until broadcast_resolved.
 }
@@ -335,10 +349,10 @@ export function mutateRoom(room,sessionId,operation,body={}) {
           ...room.members.filter(p=>!p.bot&&p.accountId).map(p=>p.accountId),
           ...roomSpectators(room).map(p=>p.accountId).filter(Boolean)
         ])]:[];
-        room.intel=[];room.motionBatches=[];room.motionSequence=0;room.auditIntelCursor=0;room.deepseekSessions={};room.status='playing';
+        room.intel=[];room.observerIntelTargets={};room.motionBatches=[];room.motionSequence=0;room.auditIntelCursor=0;room.deepseekSessions={};room.status='playing';
       } else if(operation==='rematch') {
         requireThat(room.status==='finished','本局尚未结束');
-        room.game=null;room.matchId=null;room.status='waiting';room.intel=[];room.motionBatches=[];room.motionSequence=0;room.auditIntelCursor=0;room.deepseekSessions={};room.replayAccountIds=[];
+        room.game=null;room.matchId=null;room.status='waiting';room.intel=[];room.observerIntelTargets={};room.motionBatches=[];room.motionSequence=0;room.auditIntelCursor=0;room.deepseekSessions={};room.replayAccountIds=[];
       } else throw new Error('未知房间操作');
     }
   }

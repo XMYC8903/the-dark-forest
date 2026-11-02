@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../shared/game.js';
-import {newRoom,applyGameAction,roomView,mutateRoom} from '../server/room-core.js';
+import {newRoom,applyGameAction,roomView,mutateRoom,gatherIntel,observerIntelView} from '../server/room-core.js';
 import {GameRoom} from '../server/worker.js';
 import {OrderedStatePlayback,productionGain} from '../dist/spectator-motion.js';
 import {nextAIActionAt} from '../server/ai-timing.js';
@@ -18,6 +18,16 @@ test('回合产能优先取动画数值，旧回放从同回合公开记录恢�
   assert.equal(productionGain({player:1},game),2);
   assert.equal(productionGain({player:0},game),null);
   assert.equal(productionGain({player:1}, {...game,turnIndex:13}),null);
+});
+test('观战目标记录按事件发生时的坐标保存，玩家及 AI 情报不包含隐藏目标',()=>{
+  const room=fixture(),target=room.game.players[1].galaxy;
+  gatherIntel(room,[{type:'launch',player:0,target,card:{key:'thermal',id:'strike-a'}}]);
+  assert.equal(room.intel[0].targetPlayerId,undefined);
+  assert.equal(roomView(room,'watch').game.publicEvents[0].targetPlayerId,1);
+  assert.equal(observerIntelView(room.intel,room.observerIntelTargets)[0].targetPlayerId,1);
+  room.game.players[1].galaxy=9;
+  assert.equal(roomView(room,'watch').game.publicEvents[0].targetPlayerId,1);
+  assert.equal(JSON.stringify(roomView(room,'a').game).includes('targetPlayerId'),false);
 });
 test('广播回应与同一请求内自动结算按服务器顺序保留，仅观战出口获得动画数据',()=>{
   const room=fixture(),g=room.game,caster=g.take('stellar_c'),response=g.take('hyper_c');

@@ -39,16 +39,27 @@ export function deduplicatePublicHistoryEvents(events){
 export function eventPlayerIds(event){
   const ids=new Set();
   const add=id=>{if(Number.isInteger(id)&&id>=0)ids.add(id);};
-  for(const key of ['actor','player','owner','victim','selected','winner'])add(event[key]);
+  for(const key of ['actor','player','owner','victim','selected','targetPlayerId','winner'])add(event[key]);
   for(const card of [...(event.cards||[]),...(event.removed||[])])add(card.actor);
   for(const change of event.energyChanges||[])add(change.player);
   return ids;
 }
 
-export function matchesObserverEvent(event,types,players){
+export function observerEventRoles(event){
+  const initiators=new Set(),targets=new Set();
+  const add=(set,id)=>{if(Number.isInteger(id)&&id>=0)set.add(id);};
+  if(['damage','eliminated'].includes(event.type))add(targets,event.actor??event.player);
+  else add(initiators,event.actor??event.player??event.owner);
+  add(targets,event.victim);
+  add(targets,event.targetPlayerId);
+  return {initiators,targets};
+}
+
+export function matchesObserverEvent(event,types,initiators,targets=new Set()){
   if(!isPublicHistoryEvent(event))return false;
   if(types.size&&![...observerEventCategories(event)].some(type=>types.has(type)))return false;
-  if(!players.size)return true;
-  const participants=eventPlayerIds(event);
-  return [...players].some(id=>participants.has(id));
+  const roles=observerEventRoles(event);
+  if(initiators.size&&![...initiators].some(id=>roles.initiators.has(id)))return false;
+  if(targets.size&&![...targets].some(id=>roles.targets.has(id)))return false;
+  return true;
 }

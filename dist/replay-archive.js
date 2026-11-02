@@ -21,7 +21,7 @@ export function sanitizeReplayArchive(source){
     if(!allowed.includes(raw.type))return null;
     const out={type:raw.type};
     for(const key of ['round','turnIndex','cost','progress','refund','gain'])if(Number.isFinite(raw[key]))out[key]=Math.max(0,Math.min(100000,raw[key]));
-    for(const key of ['actor','player','owner','target','victim','selected','from','to','winner'])if(raw[key]===null&&['victim','selected','winner'].includes(key))out[key]=null;else if(Number.isInteger(raw[key]))out[key]=['target','from','to'].includes(key)?safeGalaxy(raw[key]):safeIndex(raw[key]);
+    for(const key of ['actor','player','owner','target','victim','selected','targetPlayerId','from','to','winner'])if(raw[key]===null&&['victim','selected','targetPlayerId','winner'].includes(key))out[key]=null;else if(Number.isInteger(raw[key]))out[key]=['target','from','to'].includes(key)?safeGalaxy(raw[key]):safeIndex(raw[key]);
     if(Object.hasOwn(CARDS,raw.key))out.key=raw.key;
     if(raw.cardName||out.key)out.cardName=safeText(raw.cardName||CARDS[out.key]?.name,80);
     for(const key of ['outcome','effect','role'])if(typeof raw[key]==='string')out[key]=safeText(raw[key],32);

@@ -1,4 +1,4 @@
-import {newRoom,roomView,roomSummary,mutateRoom,roomSpectators,saveGame,restoreGame,gameView,spectatorGameView,gatherIntel,applyGameAction,requireThat,normalizeBotNames,appendDeepSeekUpdates} from './room-core.js';
+import {newRoom,roomView,roomSummary,mutateRoom,roomSpectators,saveGame,restoreGame,gameView,spectatorGameView,observerIntelView,gatherIntel,applyGameAction,requireThat,normalizeBotNames,appendDeepSeekUpdates} from './room-core.js';
 import {decideAI} from './ai.js';
 import {decideDeepSeek} from './deepseek.js';
 import {nextAIActionAt} from './ai-timing.js';
@@ -296,7 +296,7 @@ export class GameRoom {
     let completedRecord=false;
     if(this.room.game&&this.room.matchId){
       const hasIntelCursor=Number.isInteger(this.room.auditIntelCursor),intelCursor=hasIntelCursor?this.room.auditIntelCursor:0;
-      const intelDelta=hasIntelCursor||audit?.operation==='start'?structuredClone((this.room.intel||[]).slice(intelCursor)):undefined;
+      const intelDelta=hasIntelCursor||audit?.operation==='start'?structuredClone(observerIntelView(this.room.intel||[],this.room.observerIntelTargets||{},intelCursor)):undefined;
       const motion=this.room.auditMotionSequence!==this.room.motionSequence?structuredClone(this.room.motionBatches?.at(-1)||null):null;
       const record={kind:'game',matchId:this.room.matchId,at:Date.now(),revision:this.room.revision,operation:audit?.operation||'engine',actor:audit?.actor??null,action:audit?.action??null,
         status:this.room.status,members:this.room.members.map(p=>({name:p.name,accountId:p.accountId||null,bot:p.bot})),
