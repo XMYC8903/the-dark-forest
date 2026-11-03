@@ -45,13 +45,6 @@ export default {
       const found=request.headers.get('Cookie')?.match(/(?:^|;\s*)df_session=([a-f0-9-]{36})(?:;|$)/i)?.[1];
       const session=found||crypto.randomUUID();
       const cookie=sessionCookie(session,url.protocol==='https:');
-      const cleanup=url.pathname.match(/^\/api\/admin\/deepseek-cleanup\/([a-f0-9]{64})$/);
-      if(cleanup){
-        requireThat(env.ADMIN_LOG_TOKEN&&request.headers.get('Authorization')==='Bearer '+env.ADMIN_LOG_TOKEN,'管理员认证失败',403);
-        requireThat(request.method==='GET'||request.method==='DELETE','方法不支持',405);
-        const inner=new URL('https://internal/internal/deepseek-cleanup');inner.search=url.search;
-        return env.ROOMS.get(env.ROOMS.idFromString(cleanup[1])).fetch(new Request(inner,{method:request.method}));
-      }
       if(url.pathname.startsWith('/api/admin/logs')){
         requireThat(env.ADMIN_LOG_TOKEN&&request.headers.get('Authorization')==='Bearer '+env.ADMIN_LOG_TOKEN,'管理员认证失败',403);
         requireThat(request.method==='GET','方法不支持',405);
@@ -172,15 +165,6 @@ export class GameRoom {
   async fetch(request) {
     try {
       const pathname=new URL(request.url).pathname;
-      if(pathname==='/internal/deepseek-cleanup'){
-        requireThat(request.method==='GET'||request.method==='DELETE','方法不支持',405);
-        const cursor=new URL(request.url).searchParams.get('cursor')||'';
-        requireThat(!cursor||(cursor.startsWith('audit:')&&cursor.length<=512),'游标无效');
-        const records=await this.ctx.storage.list({prefix:'audit:',...(cursor?{startAfter:cursor}:{}),limit:100});
-        const keys=[...records.keys()],matches=keys.filter(key=>/^audit:[a-f0-9-]{36}:deepseek:/i.test(key));
-        if(request.method==='DELETE'&&matches.length)await this.ctx.storage.delete(matches);
-        return json({scanned:keys.length,matched:matches.length,deleted:request.method==='DELETE'?matches.length:0,nextCursor:keys.length===100?keys.at(-1):null});
-      }
       if(pathname==='/internal/replay-save'){
         requireThat(request.method==='POST','方法不支持',405);
         requireThat(this.room&&this.room.game?.over&&['finished','closed'].includes(this.room.status),'本局尚未结束');
