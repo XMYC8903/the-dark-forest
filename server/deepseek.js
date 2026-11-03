@@ -1,5 +1,5 @@
 import {CARDS,GALAXIES,distance} from '../shared/game.js';
-import {gameView,deepSeekRulebook} from './room-core.js';
+import {gameView,deepSeekRulebook,playerIntelView,newDeepSeekSession} from './room-core.js';
 
 const cardInfo=key=>{const c=CARDS[key];return c?{name:c.name,type:c.type,cost:c.cost,range:c.range===Infinity?'无限':c.range,level:c.level===Infinity?'无限':c.level,face:c.face,income:c.income,defense:c.defense,star:c.star,escape:c.escape,instant:c.instant}:null;};
 
@@ -70,6 +70,11 @@ function cleanLegacySession(session) {
 /** Ask DeepSeek to choose one server-generated legal action. Returns null on any API/format failure. */
 export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,session=null,onDecision=null) {
   if(!apiKey)return null;
+  if(session&&session.privacyVersion!==1){
+    const safe=newDeepSeekSession(game,me,history);
+    for(const key of Object.keys(session))delete session[key];
+    Object.assign(session,safe);
+  }
   cleanLegacySession(session);
   const actions=candidateActions(game,me);
   if(!actions.length)return null;
@@ -81,7 +86,7 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
     ...(action.target!==undefined?{targetGalaxy:GALAXIES.find(g=>g.id===action.target)?.name||'未知星系'}:{}),
     ...(action.cardId?{card:cardInfo(pCardKey(game,me,action.cardId))}:{}),
     ...(action.ids?{cards:action.ids.map(id=>cardInfo(pCardKey(game,me,id)))}:{})}));
-  const observations=history.slice(-24).map(e=>({type:e.type,actor:e.actor,target:e.target,...(e.key?{card:cardInfo(e.key)}:{})}));
+  const observations=playerIntelView(history.slice(-24),me).map(e=>({type:e.type,actor:e.actor,target:e.target,...(e.key?{card:cardInfo(e.key)}:{})}));
   const decisionMessage={role:'user',content:'现在请决策。只输出 JSON：{"choice":候选编号}。当前局面：'+JSON.stringify({me,state:publicState(view,me),observations,legalActions})};
   const conversation=session?.messages||[
     {role:'system',content:deepSeekRulebook()},

@@ -152,21 +152,39 @@ function stateDelta(previous,current) {
   if(players.length)delta.players=players;
   return delta;
 }
+// The room keeps omniscient event details for spectators and replays. AI seats
+// must receive only their own hidden coordinates, while retaining public targets.
+export function playerIntelView(intel,me){
+  return intel.map(event=>{
+    if(event.actor===me)return {...event};
+    if(event.type==='build'){const {target,...visible}=event;return visible;}
+    if(event.type==='escaped'){const {to,...visible}=event;return visible;}
+    return {...event};
+  });
+}
+export function newDeepSeekSession(game,me,intel){
+  const state=gameView(game,me),evidence=playerIntelView(intel,me);
+  const messages=[
+    {role:'system',content:deepSeekRulebook()},
+    {role:'user',content:'本局开始或记忆已安全重建。以下是我的当前视角；现在不需要输出行动。\n'+JSON.stringify(state)}
+  ];
+  if(evidence.length)messages.push({role:'user',content:'以下是本局公开记录。\n'+JSON.stringify({publicEvidence:evidence})});
+  return {privacyVersion:1,messages,lastState:state,intelCursor:intel.length};
+}
 export function appendDeepSeekUpdates(room) {
   if(room.status!=='playing'||!room.game)return;
   room.deepseekSessions||={};
   for(let me=0;me<room.members.length;me++){
     const member=room.members[me];if(member.bot!=='deepseek')continue;
     const state=gameView(room.game,me),stored=room.deepseekSessions[member.id];
-    if(!stored){
-      room.deepseekSessions[member.id]={messages:[
-        {role:'system',content:deepSeekRulebook()},
-        {role:'user',content:'本局开始。以下是我的初始视角状态。请记住规则、星图与此状态，等待后续牌局更新；现在不需要输出行动。\n'+JSON.stringify(state)}
-      ],lastState:state,intelCursor:room.intel.length};
+    if(!stored||stored.privacyVersion!==1){
+      // Old messages may already contain private coordinates. Rebuild rather
+      // than replaying any untrusted legacy conversation.
+      room.deepseekSessions[member.id]=newDeepSeekSession(room.game,me,room.intel);
       continue;
     }
     const delta=stateDelta(stored.lastState,state);
-    const evidence=room.intel.slice(stored.intelCursor||0);
+    const evidence=playerIntelView(room.intel.slice(stored.intelCursor||0),me);
     if(evidence.length)delta.publicEvidence=evidence;
     if(Object.keys(delta).length){
       stored.messages.push({role:'user',content:'牌局出现新信息。以下是自上次更新以来改变的公开状态，以及只对我可见的私有变化；请纳入本局记忆，不要输出行动。\n'+JSON.stringify(delta)});

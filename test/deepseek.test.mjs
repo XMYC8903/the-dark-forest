@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../shared/game.js';
 import {decideDeepSeek} from '../server/deepseek.js';
-import {gameView,applyGameAction,newRoom} from '../server/room-core.js';
+import {gameView,applyGameAction,newRoom,appendDeepSeekUpdates} from '../server/room-core.js';
 import {inferPositions,rankActions} from '../server/deepseek-tactics.js';
 
 test('DeepSeek 使用 Flash 深入思考并只收到玩家可见局面与合法候选',async()=>{
   const game=new Game({count:3,demo:false,seed:73});let requestBody;
-  const session={messages:[{role:'system',content:'完整规则和星图'},{role:'user',content:'开局状态'}]};
+  const session={privacyVersion:1,messages:[{role:'system',content:'完整规则和星图'},{role:'user',content:'开局状态'}]};
   const action=await decideDeepSeek(game,0,[], 'test-secret',async(url,init)=>{
     assert.equal(url,'https://api.deepseek.com/chat/completions');
     assert.equal(init.headers.Authorization,'Bearer test-secret');
@@ -34,6 +34,42 @@ test('DeepSeek 使用 Flash 深入思考并只收到玩家可见局面与合法�
   }
   assert.ok(prompt.legalActions.length>1);assert.ok(prompt.legalActions.every(x=>Number.isInteger(x.choice)&&x.action&&!('score' in x)&&!('reason' in x)));
   assert.deepEqual(action,prompt.legalActions[0].action);
+});
+
+test('DeepSeek 过滤对手隐藏坐标，并安全重建旧对话且保留公开线索',async()=>{
+  const game=new Game({count:3,demo:false,seed:73}),room=newRoom('A2C4E6','host','测试','房主');
+  room.status='playing';room.game=game;room.members=[0,1,2].map(id=>({id:'bot'+id,name:'bot'+id,bot:'deepseek'}));
+  room.intel=[{type:'build',actor:1,target:game.players[1].galaxy,key:'solar'},
+    {type:'escaped',actor:1,from:2,to:game.players[1].galaxy},
+    {type:'launch',actor:1,target:4,key:'nuclear'},
+    {type:'build',actor:0,target:game.players[0].galaxy,key:'solar'}];
+  room.deepseekSessions={bot0:{messages:[{role:'system',content:'规则'},{role:'user',content:'旧记录含秘密 '+JSON.stringify(room.intel)}],lastState:gameView(game,0),intelCursor:room.intel.length}};
+  appendDeepSeekUpdates(room);
+  const session=room.deepseekSessions.bot0;
+  assert.equal(session.privacyVersion,1);assert.equal(session.messages.some(m=>m.content.includes('旧记录含秘密')),false);
+  const initial=JSON.parse(session.messages[2].content.split('\n')[1]);
+  assert.equal(initial.publicEvidence[0].target,undefined);assert.equal(initial.publicEvidence[1].to,undefined);
+  assert.equal(initial.publicEvidence[1].from,2);assert.equal(initial.publicEvidence[2].target,4);
+  assert.equal(initial.publicEvidence[3].target,game.players[0].galaxy);
+  assert.equal(room.intel[0].target,game.players[1].galaxy);assert.equal(room.intel[1].to,game.players[1].galaxy);
+  for(let seat=0;seat<3;seat++){
+    const evidence=JSON.parse(room.deepseekSessions['bot'+seat].messages[2].content.split('\n')[1]).publicEvidence;
+    assert.equal(evidence[0].target,seat===1?game.players[1].galaxy:undefined);
+    assert.equal(evidence[1].to,seat===1?game.players[1].galaxy:undefined);
+    assert.equal(evidence[2].target,4);
+  }
+  room.intel.push({type:'build',actor:2,target:game.players[2].galaxy,key:'solar'},{type:'escaped',actor:2,to:game.players[2].galaxy});
+  appendDeepSeekUpdates(room);
+  const update=JSON.parse(session.messages.at(-1).content.split('\n')[1]);
+  assert.equal(update.publicEvidence[0].target,undefined);assert.equal(update.publicEvidence[1].to,undefined);
+  let request;
+  await decideDeepSeek(game,0,room.intel,'key',async(_url,init)=>{request=JSON.parse(init.body);return Response.json({choices:[{message:{content:'{"choice":0}'}}]});},session);
+  const decision=JSON.parse(request.messages.at(-1).content.split('当前局面：')[1]);
+  assert.equal(decision.observations[0].target,undefined);assert.equal(decision.observations[2].target,4);
+  const legacy={messages:[{role:'user',content:'旧秘密 '+JSON.stringify(room.intel)}]};
+  await decideDeepSeek(game,0,room.intel,'key',async(_url,init)=>{request=JSON.parse(init.body);return Response.json({choices:[{message:{content:'{"choice":0}'}}]});},legacy);
+  assert.equal(request.messages.some(m=>m.content.includes('旧秘密')),false);
+  assert.equal(JSON.parse(request.messages[2].content.split('\n')[1]).publicEvidence[0].target,undefined);
 });
 
 const state=()=>({active:0,round:3,played:false,markers:{},strikes:[],pending:null,
