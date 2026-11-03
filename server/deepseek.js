@@ -1,8 +1,6 @@
 import {CARDS,GALAXIES,distance} from '../shared/game.js';
 import {gameView,deepSeekRulebook,playerIntelView,newDeepSeekSession} from './room-core.js';
 
-const cardInfo=key=>{const c=CARDS[key];return c?{name:c.name,type:c.type,cost:c.cost,range:c.range===Infinity?'无限':c.range,level:c.level===Infinity?'无限':c.level,face:c.face,income:c.income,defense:c.defense,star:c.star,escape:c.escape,instant:c.instant}:null;};
-
 function candidateActions(game,me) {
   const p=game.players[me],pending=game.pending;
   if(!p?.alive||game.over)return [];
@@ -42,10 +40,10 @@ function candidateActions(game,me) {
 function publicState(view,me) {
   return {
     round:view.round,active:view.active,played:view.played,markers:view.markers,ownBroadcastKey:view.ownBroadcastKey,
-    players:view.players.map(p=>({id:p.id,name:p.name,alive:p.alive,energy:p.energy,escapeUsed:p.escapeUsed,builds:p.builds.map(c=>cardInfo(c.key)),handCount:p.handCount,
-      ...(p.id===me?{galaxy:p.galaxy,hand:p.hand.map(c=>({id:c.id,...cardInfo(c.key)}))}:{})})),
-    strikes:view.strikes.map(s=>({owner:s.owner,target:s.target,progress:s.progress,...(s.required===undefined?{}:{required:s.required}),card:cardInfo(s.card.key)})),
-    latest:view.latest?{kind:view.latest.kind,target:view.latest.target,revealed:view.latest.revealed,outcome:view.latest.outcome,victimId:view.latest.victimId,cards:view.latest.cards.map(c=>({actor:c.actor,role:c.role,...(c.key?cardInfo(c.key):{})}))}:null,
+    players:view.players.map(p=>({id:p.id,name:p.name,alive:p.alive,energy:p.energy,escapeUsed:p.escapeUsed,builds:p.builds.map(c=>c.key),handCount:p.handCount,
+      ...(p.id===me?{galaxy:p.galaxy,hand:p.hand.map(c=>({id:c.id,key:c.key}))}:{})})),
+    strikes:view.strikes.map(s=>({owner:s.owner,target:s.target,progress:s.progress,...(s.required===undefined?{}:{required:s.required}),cardKey:s.card.key})),
+    latest:view.latest?{kind:view.latest.kind,target:view.latest.target,revealed:view.latest.revealed,outcome:view.latest.outcome,victimId:view.latest.victimId,cards:view.latest.cards.map(c=>({actor:c.actor,role:c.role,...(c.key?{key:c.key}:{})}))}:null,
     pending:view.pending?.kind==='broadcast'?{kind:'broadcast',caster:view.pending.caster,target:view.pending.target,decisions:view.pending.decisions,responses:view.pending.responses.map(r=>({actor:r.actor}))}:
       view.pending?{kind:view.pending.kind,victim:view.pending.victim,strikeId:view.pending.strikeId}:null
   };
@@ -83,11 +81,10 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
   // The bot knows the face it played; no other pending card face is exposed.
   if(game.pending?.kind==='broadcast')view.ownBroadcastKey=game.pending.caster===me?game.pending.card.key:game.pending.responses.find(r=>r.actor===me)?.card.key;
   const legalActions=actions.map((action,choice)=>({choice,action,
-    ...(action.target!==undefined?{targetGalaxy:GALAXIES.find(g=>g.id===action.target)?.name||'未知星系'}:{}),
-    ...(action.cardId?{card:cardInfo(pCardKey(game,me,action.cardId))}:{}),
-    ...(action.ids?{cards:action.ids.map(id=>cardInfo(pCardKey(game,me,id)))}:{})}));
-  const observations=playerIntelView(history.slice(-24),me).map(e=>({type:e.type,actor:e.actor,target:e.target,...(e.key?{card:cardInfo(e.key)}:{})}));
-  const decisionMessage={role:'user',content:'现在请决策。只输出 JSON：{"choice":候选编号}。当前局面：'+JSON.stringify({me,state:publicState(view,me),observations,legalActions})};
+    ...(action.cardId?{cardKey:pCardKey(game,me,action.cardId)}:{}),
+    ...(action.ids?{cardKeys:action.ids.map(id=>pCardKey(game,me,id))}:{})}));
+  const observations=playerIntelView(history.slice(-24),me).map(e=>({type:e.type,actor:e.actor,target:e.target,...(e.key?{cardKey:e.key}:{})}));
+  const decisionMessage={role:'user',content:'现在请决策。卡牌 key 对应规则书的完整牌面；id 用于区分手牌，星系编号对应星图。只输出 JSON：{"choice":候选编号}。当前局面：'+JSON.stringify({me,state:publicState(view,me),observations,legalActions})};
   const conversation=session?.messages||[
     {role:'system',content:deepSeekRulebook()},
     {role:'user',content:'当前局面：'+JSON.stringify(publicState(view,me))}

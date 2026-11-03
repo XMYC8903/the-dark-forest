@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Game} from '../shared/game.js';
+import {Game,CARDS} from '../shared/game.js';
 import {decideDeepSeek} from '../server/deepseek.js';
 import {gameView,applyGameAction,newRoom,appendDeepSeekUpdates} from '../server/room-core.js';
 import {inferPositions,rankActions} from '../server/deepseek-tactics.js';
@@ -33,6 +33,12 @@ test('DeepSeek 使用 Flash 深入思考并只收到玩家可见局面与合法�
     assert.equal(player.hand,undefined);assert.equal(player.galaxy,undefined);
   }
   assert.ok(prompt.legalActions.length>1);assert.ok(prompt.legalActions.every(x=>Number.isInteger(x.choice)&&x.action&&!('score' in x)&&!('reason' in x)));
+  const hand=new Map(prompt.state.players[0].hand.map(card=>[card.id,card.key]));
+  assert.ok([...hand.values()].every(key=>CARDS[key]));
+  for(const candidate of prompt.legalActions){
+    if(candidate.action.cardId)assert.equal(candidate.cardKey,hand.get(candidate.action.cardId));
+    if(candidate.action.ids)assert.deepEqual(candidate.cardKeys,candidate.action.ids.map(id=>hand.get(id)));
+  }
   assert.deepEqual(action,prompt.legalActions[0].action);
 });
 
