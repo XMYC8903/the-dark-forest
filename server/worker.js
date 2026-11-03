@@ -73,7 +73,13 @@ export default {
       if(url.pathname==='/api/replays'){
         requireThat(request.method==='GET','方法不支持',405);return hub(env,'/replays/list',{}, {'x-auth-token':found});
       }
-      if(replayMatch){requireThat(request.method==='GET','方法不支持',405);return hub(env,'/replays/get',{matchId:replayMatch[1]}, {'x-auth-token':found});}
+      if(replayMatch){
+        requireThat(request.method==='GET','方法不支持',405);
+        const response=await hub(env,'/replays/get',{matchId:replayMatch[1]}, {'x-auth-token':found});
+        if(!response.ok)return response;
+        const result=await response.json();if(!result.reference)return json(result);
+        return stub(env.ROOMS,result.reference.roomId).fetch(new Request('https://internal/internal/replay-from-log',{method:'POST',body:JSON.stringify(result.reference)}));
+      }
       if(replaySaveMatch){
         requireThat(request.method==='POST','方法不支持',405);
         const code=replaySaveMatch[1].length===6?replaySaveMatch[1].toUpperCase():replaySaveMatch[1];
@@ -165,6 +171,12 @@ export class GameRoom {
   async fetch(request) {
     try {
       const pathname=new URL(request.url).pathname;
+      if(pathname==='/internal/replay-from-log'){
+        requireThat(request.method==='POST','方法不支持',405);
+        const reference=await request.json();
+        requireThat(/^[a-f0-9-]{36}$/i.test(reference.matchId||''),'回放编号无效');
+        return json({replay:await this.replayFromLog(reference)});
+      }
       if(pathname==='/internal/replay-save'){
         requireThat(request.method==='POST','方法不支持',405);
         requireThat(this.room&&this.room.game?.over&&['finished','closed'].includes(this.room.status),'本局尚未结束');
@@ -319,7 +331,19 @@ export class GameRoom {
     // GameRoom keeps its RNG as a function. Serialize the game without the RNG first,
     // then clone the plain snapshot so replay saves work in Durable Object runtimes.
     const completedRoom=structuredClone(serialized(this.room)),matchId=completedRoom?.matchId;if(!matchId||!completedRoom?.game?.over||completedRoom.saveReplay===false||!this.env.ACCOUNTS)return {saved:0,recipients:0};
-    const prefix=`audit:${matchId}:game:`,records=new Map();let cursor='';
+    const final=restoreGame(completedRoom.game),accountIds=[...new Set([
+      ...(completedRoom.replayAccountIds||[]),
+      ...completedRoom.members.filter(p=>!p.bot&&p.accountId).map(p=>p.accountId),
+      ...roomSpectators(completedRoom).map(p=>p.accountId).filter(Boolean)
+    ])];
+    if(!accountIds.length)return {saved:0,recipients:0};
+    const reference={matchId,name:completedRoom.name,roomId:completedRoom.id,startedAt:completedRoom.createdAt,finishedAt:Date.now(),rounds:final.round,winner:final.winner,players:completedRoom.members.map(p=>({name:p.name,bot:Boolean(p.bot)}))};
+    const response=await hub(this.env,'/internal/replay-reference',{accountIds,reference});if(!response.ok)throw new Error((await response.text()).slice(0,200));
+    const result=await response.json();if(result.saved<1)throw new Error('No account received the replay archive');
+    return {saved:result.saved,recipients:accountIds.length};
+  }
+  async replayFromLog(reference){
+    const matchId=reference.matchId,prefix=`audit:${matchId}:game:`,records=new Map();let cursor='';
     do{
       const page=await this.ctx.storage.list({prefix,...(cursor?{startAfter:cursor}:{}),limit:1000});
       for(const [key,meta] of page)if(!key.includes(':part:')&&meta?.parts)records.set(key,meta);
@@ -339,17 +363,10 @@ export class GameRoom {
       const game=spectatorGameView(state,events);game.publicEvents=[];game.motionBatches=lastMotion?[lastMotion]:[];
       frames.push({revision:record.revision,at:record.at,round:state.round,turnIndex:state.turnIndex,eventCount:events.length,game});
     }
-    if(!frames.length)return {saved:0,recipients:0};
-    const final=restoreGame((await readLog(this.ctx.storage,ordered.at(-1)[0],ordered.at(-1)[1])).state),accountIds=[...new Set([
-      ...(completedRoom.replayAccountIds||[]),
-      ...completedRoom.members.filter(p=>!p.bot&&p.accountId).map(p=>p.accountId),
-      ...roomSpectators(completedRoom).map(p=>p.accountId).filter(Boolean)
-    ])];
-    const replay={format:'dark-forest-replay',version:1,matchId,name:completedRoom.name,roomId:completedRoom.id,startedAt:firstAt||completedRoom.createdAt,finishedAt:Date.now(),rounds:final.round,winner:final.winner,players:completedRoom.members.map(p=>({name:p.name,bot:Boolean(p.bot)})),events,frames};
-    if(!accountIds.length)return {saved:0,recipients:0};
-    const response=await hub(this.env,'/internal/replay-save',{accountIds,replay});if(!response.ok)throw new Error((await response.text()).slice(0,200));
-    const result=await response.json();if(accountIds.length&&result.saved<1)throw new Error('No account received the replay archive');
-    return {saved:result.saved,recipients:accountIds.length};
+    requireThat(frames.length,'对局日志不完整，无法生成回放',404);
+    const final=restoreGame((await readLog(this.ctx.storage,ordered.at(-1)[0],ordered.at(-1)[1])).state);
+    requireThat(final.over,'对局日志尚未结束，无法生成回放',409);
+    return {format:'dark-forest-replay',version:1,matchId,name:reference.name,roomId:reference.roomId,startedAt:firstAt||reference.startedAt,finishedAt:reference.finishedAt,rounds:final.round,winner:final.winner,players:reference.players,events,frames};
   }
   async saveReplayArchiveWithRetry(){
     let lastError;

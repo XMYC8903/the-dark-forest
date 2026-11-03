@@ -57,6 +57,24 @@ export class AccountHub {
   }
   async handle(request){
     const path=new URL(request.url).pathname,body=request.method==='POST'?await request.json():{},store=this.ctx.storage;
+    if(path==='/internal/replay-reference'){
+      const ref=body.reference,matchId=String(ref?.matchId||'');
+      requireThat(request.method==='POST'&&/^[a-f0-9-]{36}$/i.test(matchId)&&/^(?:[A-Z0-9]{6}|[a-f0-9]{8})$/.test(ref?.roomId||''),'回放索引无效');
+      const recipients=[...new Set((body.accountIds||[]).filter(id=>/^[A-Z0-9]{8}$/.test(id)))];let saved=0;
+      for(const id of recipients){
+        if(!await store.get('account:'+id))continue;
+        const prefix=`replay-index:${id}:`,key=prefix+matchId,old=await store.get(key);
+        // Preserve existing archives and avoid rewriting the index on retries.
+        if(!old)await store.put(key,{source:'game-log',matchId,roomId:ref.roomId,name:String(ref.name||'黑暗森林对局').slice(0,80),players:(ref.players||[]).map(p=>({name:String(p.name||'文明').slice(0,24),bot:Boolean(p.bot)})),winner:ref.winner??null,rounds:Math.max(1,Number(ref.rounds)||1),startedAt:Number(ref.startedAt)||Date.now(),finishedAt:Number(ref.finishedAt)||Date.now()});
+        saved++;
+        const entries=[...(await store.list({prefix})).entries()].sort((a,b)=>b[1].finishedAt-a[1].finishedAt);
+        for(const [staleKey,stale] of entries.slice(5)){
+          if(stale.dataKey){for(let n=0;n<stale.parts;n++)await store.delete(`${stale.dataKey}:part:${n}`);await store.delete(stale.dataKey);}
+          await store.delete(staleKey);
+        }
+      }
+      return json({ok:true,saved,recipients:recipients.length});
+    }
     if(path==='/internal/replay-save'){
       requireThat(request.method==='POST'&&body.replay?.format==='dark-forest-replay'&&body.replay.version===1,'回放数据格式无效');
       const replay=body.replay,matchId=String(replay.matchId||'');requireThat(/^[a-f0-9-]{36}$/.test(matchId),'回放对局编号无效');
@@ -65,12 +83,14 @@ export class AccountHub {
       for(const id of recipients){
         const account=await store.get('account:'+id);if(!account)continue;
         const indexPrefix=`replay-index:${id}:`,dataKey=`replay-data:${id}:${matchId}`,indexKey=indexPrefix+matchId,old=await store.get(indexKey);
+        // A previous Worker version may still finish an in-flight archive save.
+        if(old?.source==='game-log'){saved++;continue;}
         if(old){for(let n=0;n<old.parts;n++)await store.delete(`${old.dataKey}:part:${n}`);await store.delete(old.dataKey);}
         const chunks=logParts(dataKey,replay),metadata={matchId,dataKey,parts:chunks[dataKey].parts,name:String(replay.name||'黑暗森林对局').slice(0,80),players:(replay.players||[]).map(p=>({name:String(p.name||'文明').slice(0,24),bot:Boolean(p.bot)})),winner:replay.winner??null,rounds:Math.max(1,Number(replay.rounds)||1),startedAt:Number(replay.startedAt)||Date.now(),finishedAt:Number(replay.finishedAt)||Date.now(),frameCount:Array.isArray(replay.frames)?replay.frames.length:0,eventCount:Array.isArray(replay.events)?replay.events.length:0};
         await putRecords(store,{...chunks,[indexKey]:metadata});
         saved++;
         const entries=[...(await store.list({prefix:indexPrefix})).entries()].filter(([key])=>!key.includes(':part:')).sort((a,b)=>b[1].finishedAt-a[1].finishedAt);
-        for(const [key,stale] of entries.slice(5)){for(let n=0;n<stale.parts;n++)await store.delete(`${stale.dataKey}:part:${n}`);await store.delete(stale.dataKey);await store.delete(key);}
+        for(const [key,stale] of entries.slice(5)){if(stale.dataKey){for(let n=0;n<stale.parts;n++)await store.delete(`${stale.dataKey}:part:${n}`);await store.delete(stale.dataKey);}await store.delete(key);}
       }
       return json({ok:true,saved,recipients:recipients.length});
     }
@@ -129,6 +149,7 @@ export class AccountHub {
     if(path==='/replays/get'){
       const matchId=String(body.matchId||'');requireThat(/^[a-f0-9-]{36}$/.test(matchId),'回放编号无效');
       const metadata=await store.get(`replay-index:${a.id}:${matchId}`);requireThat(metadata,'没有找到这局回放',404);
+      if(metadata.source==='game-log')return json({reference:metadata});
       return json({replay:await readLog(store,metadata.dataKey,metadata)});
     }
     if(path==='/social/state'){
