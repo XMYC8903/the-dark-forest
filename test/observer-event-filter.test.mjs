@@ -37,19 +37,29 @@ test('打击结算按结果分类，能量变化可与其他分类重叠',()=>{
   assert.equal(observerEventCategoryLabel({type:'gameover'}),null);
 });
 
-test('按发起者和目标筛选，并且不将回应者或星系误判为目标',()=>{
+test('广播结算将回应者计入目标，但不将星系编号或能量变动者误判为目标',()=>{
   const event={type:'broadcast_settled',actor:0,selected:2,target:3,targetPlayerId:1,cards:[{actor:0},{actor:2}],energyChanges:[{player:4}]};
   assert.deepEqual([...eventPlayerIds(event)],[0,2,1,4]);
   assert.deepEqual([...observerEventRoles(event).initiators],[0]);
-  assert.deepEqual([...observerEventRoles(event).targets],[1]);
+  assert.deepEqual([...observerEventRoles(event).targets],[1,2]);
   assert.equal(matchesObserverEvent(event,new Set(),new Set([0]),new Set([1])),true);
-  assert.equal(matchesObserverEvent(event,new Set(),new Set(),new Set([2])),false);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set(),new Set([2])),true);
   assert.equal(matchesObserverEvent(event,new Set(),new Set(),new Set([3])),false);
   assert.equal(matchesObserverEvent({type:'launch',actor:0,target:3},new Set(),new Set(),new Set([3])),false);
-  assert.equal(matchesObserverEvent({type:'broadcast_settled',actor:0,selected:2,target:3},new Set(),new Set(),new Set([2])),false);
+  assert.equal(matchesObserverEvent({type:'broadcast_settled',actor:0,selected:2,target:3},new Set(),new Set(),new Set([2])),true);
   assert.deepEqual([...observerEventRoles({type:'eliminated',actor:2}).targets],[2]);
   assert.equal(observerEventRoles({type:'eliminated',actor:2}).initiators.size,0);
   assert.deepEqual([...eventPlayerIds({type:'gameover',winner:3})],[3]);
+});
+
+test('广播结算支持多个目标，包含未采纳回应者，去重且排除发布者',()=>{
+  const event={type:'broadcast_settled',actor:0,targetPlayerId:1,selected:2,cards:[{actor:0,role:'发布'},{actor:2,role:'回应'},{actor:1,role:'未采纳'},{actor:3,role:'未采纳'}]};
+  assert.deepEqual([...observerEventRoles(event).targets],[1,2,3]);
+  for(const target of [1,2,3])assert.equal(matchesObserverEvent(event,new Set(),new Set([0]),new Set([target])),true);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set(),new Set([0])),false);
+  assert.equal(matchesObserverEvent(event,new Set(),new Set(),new Set([4])),false);
+  assert.equal(observerEventHasNoTarget({...event,targetPlayerId:null}),false);
+  assert.equal(observerEventHasNoTarget({type:'broadcast_settled',actor:0,targetPlayerId:null,selected:null,cards:[{actor:0,role:'发布'}]}),true);
 });
 
 test('无目标可与玩家多选，旧记录的未知目标不被误认为无目标',()=>{

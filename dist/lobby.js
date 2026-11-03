@@ -1,6 +1,6 @@
 import {validateReplayArchive,sanitizeReplayArchive} from './replay-archive.js?v=20261103-event-roles1';
 import {saveResumeArchive,loadResumeArchive,deleteResumeArchive} from './replay-resume.js?v=20261101-replay-resume1';
-import {EVENT_FILTER_CATEGORIES,NO_EVENT_TARGET,deduplicatePublicHistoryEvents,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel,observerEventHasNoTarget,observerEventRoles} from './observer-event-filter.js?v=20261103-no-target1';
+import {EVENT_FILTER_CATEGORIES,NO_EVENT_TARGET,deduplicatePublicHistoryEvents,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel,observerEventHasNoTarget,observerEventRoles} from './observer-event-filter.js?v=20261103-broadcast-targets1';
 import {launchDemo,launchOnline,receiveOnlineRoom,suspendTable} from './app.js?v=20261028-no-deepseek-dialog1';
 import {AI_NAMES} from './ai-labels.js';
 import {requestId} from './request-id.js';

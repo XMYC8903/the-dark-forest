@@ -53,6 +53,12 @@ export function observerEventRoles(event){
   else add(initiators,event.actor??event.player??event.owner);
   add(targets,event.victim);
   add(targets,event.targetPlayerId);
+  if(event.type==='broadcast_settled'){
+    // Settlement cards include the publisher and every responder, including
+    // responses that were not selected. Older records may only name selected.
+    for(const card of event.cards||[])if(!initiators.has(card.actor))add(targets,card.actor);
+    if(!initiators.has(event.selected))add(targets,event.selected);
+  }
   return {initiators,targets};
 }
 
