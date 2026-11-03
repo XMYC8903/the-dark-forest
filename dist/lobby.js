@@ -142,7 +142,7 @@ function bindReplayControls(){
 function show(next='home') {
   setScreen(next);
   if(next==='home') {
-    shell(`<span class="eyebrow">WELCOME, OBSERVER</span><h2>进入黑暗森林</h2><p>每一个文明，都在等待你的下一步。</p><div class="menu-stack"><button class="menu-action primary" id="start-menu"><span><b>开始游戏</b><small>创建房间，或加入其他文明</small></span><span>↗</span></button><button class="menu-action" id="settings-menu"><span><b>游戏设置</b><small>Demo 试玩</small></span><span>⌘</span></button>${room?`<button class="portal-link" id="resume-room">返回 ${esc(room.name)} →</button>`:''}</div>`);
+    shell(`<span class="eyebrow">WELCOME, ${esc(social.account?.name||'观察者')}</span><h2>进入黑暗森林</h2><p>每一个文明，都在等待你的下一步。</p><div class="menu-stack"><button class="menu-action primary" id="start-menu"><span><b>开始游戏</b><small>创建房间，或加入其他文明</small></span><span>↗</span></button><button class="menu-action" id="settings-menu"><span><b>游戏设置</b><small>Demo 试玩</small></span><span>⌘</span></button>${room?`<button class="portal-link" id="resume-room">返回 ${esc(room.name)} →</button>`:''}</div>`);
     $('#start-menu').onclick=()=>social.account?show('start'):social.login();$('#settings-menu').onclick=()=>show('settings');
     if($('#resume-room'))$('#resume-room').onclick=()=>openRoom(room);
   } else if(next==='account') {
