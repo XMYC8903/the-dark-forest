@@ -320,7 +320,7 @@ function observerLatestCaption(latest){
   const result=latest.cards.some(c=>c.role==='发射')?'飞行中':({locked:'科技锁死已生效',eliminated:'目标文明已消逝',survived:'目标文明防御成功',escaped:'目标文明已跃迁',miss:'已抵达目标星系',hit:'星系状态已改变'})[latest.outcome]||(latest.revealed?'已结算':'等待回应');
   return `${title} · ${target} · ${result}`;
 }
-const observerHistoryIcon=expanded=>`<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${expanded?'M12 3v5h5 M8 17v-5H3':'M12 3h5v5 M3 12v5h5'}"/></svg>`;
+const observerHistoryIcon=expanded=>`<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${expanded?'M8 3v5H3 M12 17v-5h5':'M8 3H3v5 M12 17h5v-5'}"/></svg>`;
 function renderSpectator(view=room){
   const room=view;
   const root=$('#spectator-app');if(!root||!room||(room.role!=='spectator'&&!room.isReplay))return;
