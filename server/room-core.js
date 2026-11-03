@@ -127,14 +127,14 @@ export function gameView(game,me) {
     pending};
 }
 export function deepSeekRulebook() {
-  const cards=Object.entries(CARDS).map(([key,c])=>({key,name:c.name,type:c.type,cost:c.cost,count:c.count,range:c.range===Infinity?'无限':c.range,face:c.face,level:c.level===Infinity?'无限':c.level,income:c.income,defense:c.defense,starDependent:Boolean(c.star),escape:Boolean(c.escape),rule:c.rule,detail:c.detail}));
+  const cards=Object.entries(CARDS).map(([key,c])=>[key,c.name,c.type,c.cost,c.count,c.range===Infinity?'无限':c.range??null,c.face??null,c.level===Infinity?'无限':c.level??null,c.income??null,c.defense??null,Boolean(c.star),Boolean(c.escape),c.rule??null,c.detail??null]);
   return `你是《三体·黑暗森林》网页卡牌桌游中的一名文明玩家。你的目标是活下来并争取最后胜利。你只能依据本局对话中收到的规则、当前状态和公开信息行动；其他文明的手牌和真实坐标是隐藏信息，不得假装知道。每个座位的 AI 都有独立对话。
 
 星图：星系与坐标如下：${JSON.stringify(GALAXIES.map(({id,name})=>({id,name})))}。双向航线如下（每项是相连的两个星系编号）：${JSON.stringify(EDGES)}。航线最短路径距离决定广播射程和打击飞行需要的回合数。星系状态：正常、红色（恒星熄灭但仍可建设）、灰色（降维，不存在且不能建设/攻击）；恒星依赖建设在其恒星熄灭后移入弃牌堆。
 
 完整规则：${JSON.stringify({players:'3–6 位玩家。每位开局 3 能量、4 张手牌；首位玩家额外 1 能量。',turn:'新回合开始先获得 1 点基础能量及有效建设的产能。玩家可逐张打出任意张手牌，也可保留手牌；一旦出过牌，该回合不可主动弃牌。若本回合未出牌，可选择弃置任意张手牌并补牌至 4 张，弃牌结束回合。结束回合时补牌至 4 张；回合开始不摸牌。',build:'建设支付费用并留在玩家面前；产能从以后自己的回合开始生效。恒星熄灭后不能建设依赖恒星的牌。戴森球每位玩家最多一个。光速飞船留在手牌，不能主动打出。',broadcast:'广播目标可以是任意星系，包括空星系。目标范围按最短路径计算。广播发布后进入回应阶段：有可回应牌且被点名时必须回应，监听基地允许被点名时不回应。发布者在回应结束后选一名回应者；无人回应则等待 3 秒自动结算。牌面在结算前保密，结算后公开。双方收益与费用按广播牌规则同时计算。',strike:'延时打击对自己星系无效。发射后按拥有者的座位计时，每次轮到该座位推进 1 回合；飞行时间为发射者与目标星系最短路径距离。命中时应用卡牌效果和防御。科技锁死立即拆除目标玩家全部建设，按其原始总费用的一半向下取整返还给该玩家，手牌不变。',escape:'遭遇无法防御的致命打击时，若未用过飞船、能量至少 10、有光速飞船且存在空的非灰星系，可选择逃生。逃生弃掉飞船和全部建设，能量变为 3，随机跃迁到一个空星系，打击落空。',elimination:'淘汰时手牌与建设弃置，但该玩家已发出的打击继续飞行。光粒熄灭恒星并弃置依赖恒星建设；湮灭熄灭恒星并摧毁全部建设；降维将星系变灰。对局在场上只剩一人且所有打击均已结算后结束。',deck:'抽牌堆为空时，把累计弃牌堆洗成新抽牌堆；手牌、场上建设和在飞打击不回收。'}).toString()}
 
-卡牌完整数据（费用、射程、产能、防御和文本）：${JSON.stringify(cards)}
+卡牌数据按列排列：[key,名称,类型,费用,数量,射程,面,等级,产能,防御,依赖恒星,逃生,规则,详情]；null 表示无此属性：${JSON.stringify(cards)}
 
 收到牌局更新时，仅把它作为新信息记入判断，不要输出普通聊天内容。只有当你收到“现在请决策”时，才从给定的合法候选中选择一个，并严格只输出 JSON：{"choice":候选编号}。不能创造候选之外的动作。`;
 }
@@ -187,7 +187,7 @@ export function appendDeepSeekUpdates(room) {
     const evidence=playerIntelView(room.intel.slice(stored.intelCursor||0),me);
     if(evidence.length)delta.publicEvidence=evidence;
     if(Object.keys(delta).length){
-      stored.messages.push({role:'user',content:'牌局出现新信息。以下是自上次更新以来改变的公开状态，以及只对我可见的私有变化；请纳入本局记忆，不要输出行动。\n'+JSON.stringify(delta)});
+      stored.messages.push({role:'user',content:'局面更新（记住，勿输出）：\n'+JSON.stringify(delta)});
       stored.lastState=state;
     }
     stored.intelCursor=room.intel.length;

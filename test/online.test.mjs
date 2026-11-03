@@ -90,7 +90,7 @@ test('每个 DeepSeek 座位开局获得独立规则上下文，并只接收自�
   room.game.players[(seat+1)%room.game.players.length].energy++;
   appendDeepSeekUpdates(room);
   const update=session.messages.at(-1).content;
-  assert.ok(update.includes('牌局出现新信息')&&update.includes('energy'));
+  assert.ok(update.includes('局面更新')&&update.includes('energy'));
   assert.equal(session.messages.length,3);
 });
 test('进行中的真人主动退出后由 AI 接管，最后一位真人退出时房间关闭',()=>{

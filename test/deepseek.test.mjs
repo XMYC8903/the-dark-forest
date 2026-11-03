@@ -2,8 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Game,CARDS} from '../shared/game.js';
 import {decideDeepSeek} from '../server/deepseek.js';
-import {gameView,applyGameAction,newRoom,appendDeepSeekUpdates} from '../server/room-core.js';
+import {gameView,applyGameAction,newRoom,appendDeepSeekUpdates,deepSeekRulebook} from '../server/room-core.js';
 import {inferPositions,rankActions} from '../server/deepseek-tactics.js';
+
+test('紧凑规则表保留每张牌的所有规则和属性',()=>{
+  const text=deepSeekRulebook(),rows=JSON.parse(text.split('null 表示无此属性：')[1].split('\n')[0]);
+  assert.equal(rows.length,Object.keys(CARDS).length);
+  for(const [key,name,type,cost,count,range,face,level,income,defense,star,escape,rule,detail] of rows){
+    const card=CARDS[key];assert.ok(card);
+    assert.deepEqual([name,type,cost,count,range,face,level,income,defense,star,escape,rule,detail],
+      [card.name,card.type,card.cost,card.count,card.range===Infinity?'无限':card.range??null,card.face??null,card.level===Infinity?'无限':card.level??null,card.income??null,card.defense??null,Boolean(card.star),Boolean(card.escape),card.rule??null,card.detail??null]);
+  }
+});
 
 test('DeepSeek 使用 Flash 深入思考并只收到玩家可见局面与合法候选',async()=>{
   const game=new Game({count:3,demo:false,seed:73});let requestBody;
