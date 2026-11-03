@@ -1,6 +1,6 @@
 import {validateReplayArchive,sanitizeReplayArchive} from './replay-archive.js?v=20261103-event-roles1';
 import {saveResumeArchive,loadResumeArchive,deleteResumeArchive} from './replay-resume.js?v=20261101-replay-resume1';
-import {EVENT_FILTER_CATEGORIES,deduplicatePublicHistoryEvents,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel,observerEventRoles} from './observer-event-filter.js?v=20261103-event-roles1';
+import {EVENT_FILTER_CATEGORIES,NO_EVENT_TARGET,deduplicatePublicHistoryEvents,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel,observerEventHasNoTarget,observerEventRoles} from './observer-event-filter.js?v=20261103-no-target1';
 import {launchDemo,launchOnline,receiveOnlineRoom,suspendTable} from './app.js?v=20261028-no-deepseek-dialog1';
 import {AI_NAMES} from './ai-labels.js';
 import {requestId} from './request-id.js';
@@ -388,11 +388,11 @@ function renderSpectator(view=room){
   const filterLabel=(name,selected)=>selected.size?`${name} · ${selected.size}`:`全部${name}`;
   const filterMenu=(key,name,items,selected)=>`<details class="observer-filter" data-filter="${key}"${openFilters.has(key)?' open':''}><summary aria-label="按${name}筛选">${filterLabel(name,selected)}</summary><div class="observer-filter-menu"><button type="button" class="observer-filter-clear" data-filter-clear="${key}">显示全部${name}</button>${items.map(([value,label])=>`<label><input type="checkbox" data-filter-option="${key}" value="${esc(value)}"${selected.has(value)?' checked':''}><span>${esc(label)}</span></label>`).join('')}</div></details>`;
   const playerOptions=game.players.map(p=>[p.id,p.name]);
-  const filterOptions=filterMenu('type','事件',EVENT_FILTER_CATEGORIES,observerEventTypes)+filterMenu('initiator','发起者',playerOptions,observerEventInitiators)+filterMenu('target','目标',playerOptions,observerEventTargets);
+  const filterOptions=filterMenu('type','事件',EVENT_FILTER_CATEGORIES,observerEventTypes)+filterMenu('initiator','发起者',playerOptions,observerEventInitiators)+filterMenu('target','目标',[[NO_EVENT_TARGET,'无目标'],...playerOptions],observerEventTargets);
   const eventRolesHTML=event=>{
     const roles=observerEventRoles(event),names=ids=>[...ids].map(id=>esc(actorName(id))).join('、');
     const hasTarget=['broadcast_published','broadcast_settled','broadcast','launch','impact','lock','miss','system_hit','damage','eliminated'].includes(event.type);
-    const noTarget=event.targetPlayerId===null||event.victim===null||['miss','system_hit'].includes(event.type);
+    const noTarget=observerEventHasNoTarget(event);
     return `<span class="observer-event-roles">发起者：${roles.initiators.size?names(roles.initiators):'未记录'}${hasTarget?` · 目标：${roles.targets.size?names(roles.targets):noTarget?'无':'未记录'}`:''}</span>`;
   };
   const legend=game.players.map(p=>`<span style="--observer-color:${observerColor(p.id,game)}"><i></i>${esc(p.name)}</span>`).join('');
@@ -420,7 +420,7 @@ function renderSpectator(view=room){
   for(const filter of historySection.querySelectorAll('.observer-filter')){
     const key=filter.dataset.filter,isPlayer=key!=='type',selected=key==='initiator'?observerEventInitiators:key==='target'?observerEventTargets:observerEventTypes;
     const menu=filter.querySelector('.observer-filter-menu');if(openFilters.has(filter.dataset.filter))menu.scrollTop=openFilters.get(filter.dataset.filter);
-    filter.onchange=event=>{const input=event.target;if(!input.matches('[data-filter-option]'))return;const value=isPlayer?Number(input.value):input.value;if(input.checked)selected.add(value);else selected.delete(value);applyEventFilters();};
+    filter.onchange=event=>{const input=event.target;if(!input.matches('[data-filter-option]'))return;const value=isPlayer&&input.value!==NO_EVENT_TARGET?Number(input.value):input.value;if(input.checked)selected.add(value);else selected.delete(value);applyEventFilters();};
     filter.querySelector('[data-filter-clear]').onclick=()=>{selected.clear();for(const input of filter.querySelectorAll('[data-filter-option]'))input.checked=false;applyEventFilters();};
   }
   root.querySelector('#observer-history-expand').onclick=event=>{

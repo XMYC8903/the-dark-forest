@@ -5,6 +5,7 @@ export const EVENT_FILTER_CATEGORIES=[
 ];
 
 const historyEventTypes=new Set(['build','broadcast_published','broadcast_settled','broadcast','launch','impact','system_hit','damage','miss','lock','escaped','eliminated','production']);
+export const NO_EVENT_TARGET='no_target';
 
 export function observerEventCategories(event){
   const categories=new Set();
@@ -55,11 +56,16 @@ export function observerEventRoles(event){
   return {initiators,targets};
 }
 
+export function observerEventHasNoTarget(event){
+  if(observerEventRoles(event).targets.size)return false;
+  return ['build','production','escaped','miss','system_hit'].includes(event.type)||event.targetPlayerId===null||event.victim===null;
+}
+
 export function matchesObserverEvent(event,types,initiators,targets=new Set()){
   if(!isPublicHistoryEvent(event))return false;
   if(types.size&&![...observerEventCategories(event)].some(type=>types.has(type)))return false;
   const roles=observerEventRoles(event);
   if(initiators.size&&![...initiators].some(id=>roles.initiators.has(id)))return false;
-  if(targets.size&&![...targets].some(id=>roles.targets.has(id)))return false;
+  if(targets.size&&![...targets].some(id=>id===NO_EVENT_TARGET?observerEventHasNoTarget(event):roles.targets.has(id)))return false;
   return true;
 }

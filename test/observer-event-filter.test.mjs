@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EVENT_FILTER_CATEGORIES,deduplicatePublicHistoryEvents,eventPlayerIds,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel,observerEventRoles} from '../dist/observer-event-filter.js';
+import {EVENT_FILTER_CATEGORIES,NO_EVENT_TARGET,deduplicatePublicHistoryEvents,eventPlayerIds,isPublicHistoryEvent,matchesObserverEvent,observerEventCategories,observerEventCategoryLabel,observerEventHasNoTarget,observerEventRoles} from '../dist/observer-event-filter.js';
 import {gatherIntel} from '../server/room-core.js';
 
 test('event and player selections combine and empty selections include all',()=>{
@@ -50,6 +50,20 @@ test('按发起者和目标筛选，并且不将回应者或星系误判为目�
   assert.deepEqual([...observerEventRoles({type:'eliminated',actor:2}).targets],[2]);
   assert.equal(observerEventRoles({type:'eliminated',actor:2}).initiators.size,0);
   assert.deepEqual([...eventPlayerIds({type:'gameover',winner:3})],[3]);
+});
+
+test('无目标可与玩家多选，旧记录的未知目标不被误认为无目标',()=>{
+  const none=new Set([NO_EVENT_TARGET]);
+  const matches=(event,targets=none)=>matchesObserverEvent(event,new Set(),new Set(),targets);
+  assert.equal(matches({type:'launch',actor:0,targetPlayerId:null}),true);
+  assert.equal(matches({type:'launch',actor:0,target:3}),false);
+  assert.equal(matches({type:'impact',actor:0,outcome:'miss',victim:null}),true);
+  assert.equal(matches({type:'production',actor:0}),true);
+  assert.equal(matches({type:'build',actor:0}),true);
+  assert.equal(matches({type:'impact',actor:0,victim:2},new Set([NO_EVENT_TARGET,2])),true);
+  assert.equal(matches({type:'impact',actor:0,victim:2}),false);
+  assert.equal(observerEventHasNoTarget({type:'impact',victim:2,targetPlayerId:null}),false);
+  assert.equal(matchesObserverEvent({type:'launch',actor:0,targetPlayerId:null},new Set(['launch']),new Set([1]),none),false);
 });
 
 test('公开记录仅展示指定分类，不展示弃牌、撤回打击、对局结束等事件',()=>{
