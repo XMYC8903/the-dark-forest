@@ -10,7 +10,7 @@ class Storage {
   map=new Map();
   async get(key){return Array.isArray(key)?new Map(key.filter(k=>this.map.has(k)).map(k=>[k,structuredClone(this.map.get(k))])):structuredClone(this.map.get(key));}
   async put(key,value){for(const [k,v] of typeof key==='object'?Object.entries(key):[[key,value]])this.map.set(k,structuredClone(v));}
-  async delete(key){this.map.delete(key);}
+  async delete(key){if(Array.isArray(key)){for(const k of key)this.map.delete(k);}else this.map.delete(key);}
   async list({prefix='',startAfter='',limit=10000}={}){return new Map([...this.map].filter(([k])=>k.startsWith(prefix)&&k>startAfter).sort(([a],[b])=>a.localeCompare(b)).slice(0,limit));}
 }
 function fixture(){
@@ -167,6 +167,19 @@ test('房间只保存单键统计记录，管理员日志接口可读取且普�
   const response=await room.fetch(new Request('https://internal/internal/logs?kind=deepseek'));
   assert.equal(response.status,200);assert.equal((await response.json()).entries.length,1);
   assert.equal((await worker.fetch(new Request('https://game.test/api/admin/logs/A2C4E6?kind=deepseek'),{ADMIN_LOG_TOKEN:'secret'})).status,403);
+});
+test('DeepSeek 指标按对局保留最近十局，不删除对局日志及回放',async()=>{
+  const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const job=fn();jobs.push(job);return job;}};
+  const room=new GameRoom(ctx,{});await jobs[0];const matches=Array.from({length:11},()=>crypto.randomUUID());
+  for(let i=0;i<matches.length;i++){
+    const id=matches[i],record={schemaVersion:1,kind:'deepseek',matchId:id,at:i+1};
+    await storage.put(`audit:${id}:game:0001`,{parts:1});
+    await room.recordDeepseekMetric(`audit:${id}:deepseek:0001:metric`,record);
+  }
+  assert.equal(await storage.get(`audit:${matches[0]}:deepseek:0001:metric`),undefined);
+  assert.ok(await storage.get(`audit:${matches[0]}:game:0001`));
+  for(const id of matches.slice(1))assert.ok(await storage.get(`audit:${id}:deepseek:0001:metric`));
+  assert.equal((await storage.get('deepseek-metric-retention')).length,10);
 });
 test('大对话分片保存房间，休眠恢复完整且清理旧状态分片',async()=>{
   const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const p=fn();jobs.push(p);return p;}};

@@ -291,6 +291,36 @@ export class GameRoom {
     this.roomBlob={chunked:true,key,parts:parts[key].parts};await this.ctx.storage.put('room',this.roomBlob);
     if(old){const keys=Array.from({length:old.parts},(_,i)=>old.key+':part:'+i);keys.push(old.key);for(const k of keys)await this.ctx.storage.delete(k);}
   }
+  async recordDeepseekMetric(key,record){
+    const storage=this.ctx.storage,indexKey='deepseek-metric-retention',matchId=record.matchId;
+    let matches=await storage.get(indexKey);const bootstrap=!Array.isArray(matches);
+    if(!Array.isArray(matches)){
+      // Bootstrap once from existing compact metrics; never delete other logs.
+      const found=new Map();let cursor='';
+      do{
+        const page=await storage.list({prefix:'audit:',...(cursor?{startAfter:cursor}:{}),limit:1000});
+        for(const [entry,value] of page){
+          const match=entry.match(/^audit:([a-f0-9-]{36}):deepseek:/i);
+          if(match&&value?.kind==='deepseek'&&value.schemaVersion===1)found.set(match[1],Math.max(found.get(match[1])||0,Number(value.at)||0));
+        }
+        const keys=[...page.keys()];cursor=keys.length===1000?keys.at(-1):'';
+      }while(cursor);
+      matches=[...found].map(([id,at])=>({id,at}));
+    }
+    await storage.put(key,record);
+    if(matches.some(m=>m.id===matchId)){if(!bootstrap)return;}
+    else matches.push({id:matchId,at:record.at});
+    matches.sort((a,b)=>b.at-a.at);
+    for(const stale of matches.slice(10)){
+      const prefix=`audit:${stale.id}:deepseek:`;let cursor='';
+      do{
+        const page=await storage.list({prefix,...(cursor?{startAfter:cursor}:{}),limit:1000});
+        const keys=[...page.keys()];cursor=keys.length===1000?keys.at(-1):'';
+        for(let i=0;i<keys.length;i+=100)await storage.delete(keys.slice(i,i+100));
+      }while(cursor);
+    }
+    await storage.put(indexKey,matches.slice(0,10));
+  }
   async commit(audit=null) {
     if(this.room.game&&!this.room.matchId)this.room.matchId=crypto.randomUUID();
     if(this.room.game&&this.room.saveReplay!==false)this.room.replayAccountIds=[...new Set([
@@ -455,7 +485,8 @@ export class GameRoom {
       if(metric){
         const at=Date.now(),key=`audit:${deepseekTask.matchId}:deepseek:${String(at).padStart(13,'0')}:${deepseekTask.token}`;
         const record={...metric,kind:'deepseek',matchId:deepseekTask.matchId,at,player:deepseekTask.player,revision:deepseekTask.revision,round:deepseekTask.game.round,applied,fallback,appliedActionType:applied?action.type:null};
-        this.ctx.waitUntil(this.ctx.storage.put(key,record).catch(()=>console.warn('DeepSeek metrics could not be saved')));
+        this.metricQueue=(this.metricQueue||Promise.resolve()).catch(()=>{}).then(()=>this.recordDeepseekMetric(key,record));
+        this.ctx.waitUntil(this.metricQueue.catch(()=>console.warn('DeepSeek metrics could not be saved')));
       }
     }
   }
