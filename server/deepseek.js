@@ -68,12 +68,12 @@ function cleanLegacySession(session) {
 }
 
 /** Ask DeepSeek to choose one server-generated legal action. Returns null on any API/format failure. */
-export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,session=null,onDecision=null,onAudit=null) {
+export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,session=null,onDecision=null) {
   if(!apiKey)return null;
   cleanLegacySession(session);
   const actions=candidateActions(game,me);
   if(!actions.length)return null;
-  if(actions.length===1){onDecision?.({actionType:actions[0].type,source:'forced',choice:null,candidates:1});await onAudit?.({source:'forced',request:null,response:null,action:actions[0]});return actions[0];}
+  if(actions.length===1){onDecision?.({actionType:actions[0].type,source:'forced',choice:null,candidates:1});return actions[0];}
   const view=gameView(game,me);
   // The bot knows the face it played; no other pending card face is exposed.
   if(game.pending?.kind==='broadcast')view.ownBroadcastKey=game.pending.caster===me?game.pending.card.key:game.pending.responses.find(r=>r.actor===me)?.card.key;
@@ -90,16 +90,14 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
   const messages=session?.messages||conversation;
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
   const requestBody={model:'deepseek-flash',thinking:{type:'enabled'},reasoning_effort:'high',max_tokens:4096,response_format:{type:'json_object'},messages:[...messages,decisionMessage]};
-  const audit={source:'model',request:structuredClone(requestBody),response:null,status:null,action:null,error:null,startedAt:Date.now()};
   try {
-    await onAudit?.({...audit,stage:'request'});
     const response=await fetchImpl('https://api.deepseek.com/chat/completions',{
       method:'POST',headers:{'Authorization':'Bearer '+apiKey,'Content-Type':'application/json'},signal:controller.signal,
       body:JSON.stringify(requestBody)
     });
-    audit.status=response.status;const raw=await response.text();audit.response=raw;
-    if(!response.ok){audit.error='http-error';console.warn('DeepSeek API returned status',response.status);return null;}
-    const data=JSON.parse(raw);audit.response=data;const content=data?.choices?.[0]?.message?.content;
+    const raw=await response.text();
+    if(!response.ok){console.warn('DeepSeek API returned status',response.status);return null;}
+    const data=JSON.parse(raw);const content=data?.choices?.[0]?.message?.content;
     if(typeof content!=='string'){console.warn('DeepSeek API returned no message content');return null;}
     if(data?.choices?.[0]?.finish_reason==='length'){console.warn('DeepSeek API output was truncated');return null;}
     const result=JSON.parse(content),choice=result.choice;
@@ -107,8 +105,8 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
     const saved=JSON.stringify({choice});
     if(session?.messages)session.messages.push(decisionMessage,{role:'assistant',content:saved});
     onDecision?.({actionType:actions[choice].type,source:'model',choice,candidates:actions.length});
-    audit.action=actions[choice];return actions[choice];
-  } catch(error){audit.error=error?.message||'request-failed';console.warn('DeepSeek API request failed',error?.name||'unknown error');return null;} finally{clearTimeout(timer);audit.durationMs=Date.now()-audit.startedAt;await onAudit?.({...audit,stage:'response'});}
+    return actions[choice];
+  } catch(error){console.warn('DeepSeek API request failed',error?.name||'unknown error');return null;} finally{clearTimeout(timer);}
 }
 
 function pCardKey(game,me,id){return game.players[me].hand.find(c=>c.id===id)?.key;}

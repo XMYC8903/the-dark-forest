@@ -110,14 +110,14 @@ test('日志分片完整保留中文大提示词，后台接口拒绝普通用�
   assert.equal((await worker.fetch(new Request('https://game.test/api/admin/logs'),{ADMIN_LOG_TOKEN:'secret'})).status,403);
   assert.equal((await worker.fetch(new Request('https://game.test/api/auth/login',{method:'POST',headers:{Origin:'https://attacker.test'},body:'{}'}),{})).status,403);
 });
-test('DeepSeek 私有日志包含实际请求、原始输出、思考和用量，不包含 API Key',async()=>{
+test('DeepSeek 决策正常执行，但不再生成请求和响应审计日志',async()=>{
   const game=new Game({count:3}),entries=[];let sent;
   const action=await decideDeepSeek(game,0,[],'private-secret',async(url,options)=>{sent=JSON.parse(options.body);return Response.json({choices:[{message:{content:'{"choice":0}',reasoning_content:'思考过程'},finish_reason:'stop'}],usage:{total_tokens:42}});},null,null,entry=>entries.push(entry));
-  assert.ok(action);assert.equal(entries[0].stage,'request');assert.deepEqual(entries[0].request,sent);assert.equal(entries[1].response.choices[0].message.reasoning_content,'思考过程');assert.equal(entries[1].response.usage.total_tokens,42);assert.equal(JSON.stringify(entries).includes('private-secret'),false);
+  assert.ok(action);assert.ok(sent.messages.length);assert.deepEqual(entries,[]);
 });
-test('DeepSeek HTTP 失败也保存错误响应',async()=>{
+test('DeepSeek HTTP 失败时回退，不再保存错误响应日志',async()=>{
   const entries=[],action=await decideDeepSeek(new Game({count:3}),0,[],'key',async()=>new Response('quota exceeded',{status:429}),null,null,e=>entries.push(e));
-  assert.equal(action,null);assert.equal(entries[1].status,429);assert.equal(entries[1].response,'quota exceeded');
+  assert.equal(action,null);assert.deepEqual(entries,[]);
 });
 test('大对话分片保存房间，休眠恢复完整且清理旧状态分片',async()=>{
   const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const p=fn();jobs.push(p);return p;}};

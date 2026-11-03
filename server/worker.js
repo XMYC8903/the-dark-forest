@@ -45,6 +45,13 @@ export default {
       const found=request.headers.get('Cookie')?.match(/(?:^|;\s*)df_session=([a-f0-9-]{36})(?:;|$)/i)?.[1];
       const session=found||crypto.randomUUID();
       const cookie=sessionCookie(session,url.protocol==='https:');
+      const cleanup=url.pathname.match(/^\/api\/admin\/deepseek-cleanup\/([a-f0-9]{64})$/);
+      if(cleanup){
+        requireThat(env.ADMIN_LOG_TOKEN&&request.headers.get('Authorization')==='Bearer '+env.ADMIN_LOG_TOKEN,'管理员认证失败',403);
+        requireThat(request.method==='GET'||request.method==='DELETE','方法不支持',405);
+        const inner=new URL('https://internal/internal/deepseek-cleanup');inner.search=url.search;
+        return env.ROOMS.get(env.ROOMS.idFromString(cleanup[1])).fetch(new Request(inner,{method:request.method}));
+      }
       if(url.pathname.startsWith('/api/admin/logs')){
         requireThat(env.ADMIN_LOG_TOKEN&&request.headers.get('Authorization')==='Bearer '+env.ADMIN_LOG_TOKEN,'管理员认证失败',403);
         requireThat(request.method==='GET','方法不支持',405);
@@ -165,6 +172,15 @@ export class GameRoom {
   async fetch(request) {
     try {
       const pathname=new URL(request.url).pathname;
+      if(pathname==='/internal/deepseek-cleanup'){
+        requireThat(request.method==='GET'||request.method==='DELETE','方法不支持',405);
+        const cursor=new URL(request.url).searchParams.get('cursor')||'';
+        requireThat(!cursor||(cursor.startsWith('audit:')&&cursor.length<=512),'游标无效');
+        const records=await this.ctx.storage.list({prefix:'audit:',...(cursor?{startAfter:cursor}:{}),limit:100});
+        const keys=[...records.keys()],matches=keys.filter(key=>/^audit:[a-f0-9-]{36}:deepseek:/i.test(key));
+        if(request.method==='DELETE'&&matches.length)await this.ctx.storage.delete(matches);
+        return json({scanned:keys.length,matched:matches.length,deleted:request.method==='DELETE'?matches.length:0,nextCursor:keys.length===100?keys.at(-1):null});
+      }
       if(pathname==='/internal/replay-save'){
         requireThat(request.method==='POST','方法不支持',405);
         requireThat(this.room&&this.room.game?.over&&['finished','closed'].includes(this.room.status),'本局尚未结束');
@@ -278,10 +294,6 @@ export class GameRoom {
     await putRecords(this.ctx.storage,{...writes,...parts});
     this.roomBlob={chunked:true,key,parts:parts[key].parts};await this.ctx.storage.put('room',this.roomBlob);
     if(old){const keys=Array.from({length:old.parts},(_,i)=>old.key+':part:'+i);keys.push(old.key);for(const k of keys)await this.ctx.storage.delete(k);}
-  }
-  async recordDeepseek(task,entry){
-    const matchId=task.matchId||this.room.matchId;
-    await putRecords(this.ctx.storage,logParts(`audit:${matchId}:deepseek:${Date.now()}:${task.token}:${entry.stage||'forced'}`,{...entry,kind:'deepseek',matchId,at:Date.now(),player:task.player,revision:task.revision,requestId:task.token}));
   }
   async commit(audit=null) {
     if(this.room.game&&!this.room.matchId)this.room.matchId=crypto.randomUUID();
@@ -417,27 +429,22 @@ export class GameRoom {
 
     let action=null;
     try {
-      action=await decideDeepSeek(deepseekTask.game,deepseekTask.player,deepseekTask.intel,this.env.DEEPSEEK_API_KEY,fetch,deepseekTask.session,
-        decision=>console.info('DeepSeek decision',JSON.stringify(decision)),
-        entry=>this.recordDeepseek(deepseekTask,entry));
+      action=await decideDeepSeek(deepseekTask.game,deepseekTask.player,deepseekTask.intel,this.env.DEEPSEEK_API_KEY,fetch,deepseekTask.session);
     }catch(error){console.warn('DeepSeek decision failed',error?.message||'unknown error');}
 
     await this.ctx.blockConcurrencyWhile(async()=>{
-      if(this.room?.aiThinking?.token!==deepseekTask.token){await this.recordDeepseek(deepseekTask,{stage:'result',outcome:'discarded',reason:'request-cancelled-or-timed-out'});return;}
+      if(this.room?.aiThinking?.token!==deepseekTask.token)return;
       if(this.room.revision!==deepseekTask.revision){
-        await this.recordDeepseek(deepseekTask,{stage:'result',outcome:'discarded',reason:'game-revision-changed'});
         this.room.aiThinking=null;this.room.revision++;this.room.updatedAt=Date.now();await this.commit();return;
       }
       const backup=serialized(this.room);
       try {
         if(deepseekTask.session?.messages)this.room.deepseekSessions[deepseekTask.sessionId]=deepseekTask.session;
-        const fallback=!action;
         if(!action){console.warn('DeepSeek unavailable; using local Zhizi policy');action=decideAI(gameView(this.room.game,deepseekTask.player),deepseekTask.player,'hard',this.room.intel);}
         if(!action)throw new Error('AI 没有生成有效行动');
         this.room.aiThinking=null;
         applyGameAction(this.room,deepseekTask.player,action);
         this.room.revision++;this.room.updatedAt=Date.now();await this.commit({operation:'deepseek-action',actor:deepseekTask.player,action});
-        await this.recordDeepseek(deepseekTask,{stage:'result',outcome:'applied',source:fallback?'local-fallback':'model',action});
       }catch(error){
         this.room=revived(backup);this.room.aiThinking=null;this.room.revision++;this.room.updatedAt=Date.now();
         console.error('AI action failed',error.message);await this.commit();
