@@ -430,7 +430,7 @@ export class GameRoom {
 
     let action=null,metric=null,applied=false,fallback=false;
     try {
-      action=await decideDeepSeek(deepseekTask.game,deepseekTask.player,deepseekTask.intel,this.env.DEEPSEEK_API_KEY,fetch,deepseekTask.session,null,value=>{metric=value;});
+      action=await decideDeepSeek(deepseekTask.game,deepseekTask.player,deepseekTask.intel,this.env.DEEPSEEK_API_KEY,fetch,deepseekTask.session,null,value=>{metric=value;},{observationWindow:this.env.DEEPSEEK_OBSERVATIONS});
     }catch(error){console.warn('DeepSeek decision failed',error?.message||'unknown error');}
 
     try{await this.ctx.blockConcurrencyWhile(async()=>{

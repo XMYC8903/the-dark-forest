@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Game,CARDS} from '../shared/game.js';
 import {decideDeepSeek} from '../server/deepseek.js';
-import {gameView,applyGameAction,newRoom,appendDeepSeekUpdates,deepSeekRulebook} from '../server/room-core.js';
+import {gameView,applyGameAction,newRoom,appendDeepSeekUpdates,deepSeekRulebook,newDeepSeekSession} from '../server/room-core.js';
 import {inferPositions,rankActions} from '../server/deepseek-tactics.js';
 
 test('紧凑规则表保留每张牌的所有规则和属性',()=>{
@@ -12,6 +12,27 @@ test('紧凑规则表保留每张牌的所有规则和属性',()=>{
     const card=CARDS[key];assert.ok(card);
     assert.deepEqual([name,type,cost,count,range,face,level,income,defense,star,escape,rule,detail],
       [card.name,card.type,card.cost,card.count,card.range===Infinity?'无限':card.range??null,card.face??null,card.level===Infinity?'无限':card.level??null,card.income??null,card.defense??null,Boolean(card.star),Boolean(card.escape),card.rule??null,card.detail??null]);
+  }
+});
+
+test('事件重复窗口可切换，完整公开记录和候选信息保持一致；缺失历史时恢复 24 条',async()=>{
+  const game=new Game({count:3,demo:false}),history=Array.from({length:30},(_,i)=>({type:'launch',actor:1,target:i%9+1,key:'nuclear',round:i+1}));
+  const prompts=[];
+  for(const window of [24,3,0]){
+    const session=newDeepSeekSession(game,0,history);let metrics;
+    await decideDeepSeek(game,0,history,'key',async(_url,request)=>{
+      const messages=JSON.parse(request.body).messages,prompt=JSON.parse(messages.at(-1).content.split('当前局面：')[1]);
+      assert.deepEqual(JSON.parse(messages[2].content.split('\n')[1]).publicEvidence,history);
+      assert.equal(prompt.observations?.length||0,window);prompts.push(prompt);
+      return Response.json({choices:[{message:{content:'{"choice":0}'}}]});
+    },session,null,e=>{metrics=e;},{observationWindow:window});
+    assert.equal(metrics.observationWindow,window);
+  }
+  const normalize=({observations,...rest})=>({...rest,legalActions:rest.legalActions.map(({choice,...c})=>c).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))});
+  assert.deepEqual(normalize(prompts[0]),normalize(prompts[1]));assert.deepEqual(normalize(prompts[0]),normalize(prompts[2]));
+  for(const session of [null,{...newDeepSeekSession(game,0,[]),intelCursor:0}]){
+    let metrics;await decideDeepSeek(game,0,history,'key',async()=>Response.json({choices:[{message:{content:'{"choice":0}'}}]}),session,null,e=>{metrics=e;},{observationWindow:0});
+    assert.equal(metrics.observationWindow,24);
   }
 });
 

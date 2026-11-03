@@ -35,4 +35,8 @@ DeepSeek 只记录统计数据：对局/座位、提示词版本、决策阶段�
 
 导出：`node scripts/export-private-logs.mjs 房间码 对局ID deepseek`。汇总：`node scripts/summarize-deepseek.mjs artifacts/private-logs/文件名.json`（可指定多个文件，重叠记录去重）。汇总包含阶段/提示词版本分组、用量及其已知/未知调用数、缓存命中率、耗时和回退次数；实际费用还需结合调用时适用的价格，字节数不等于 token 数。规则表压缩只对新建的系统消息生效，进行中对局可能沿用旧系统消息，比较时也应参考记录中的 systemBytes。
 
+重复事件实验：Worker 环境变量 `DEEPSEEK_OBSERVATIONS` 接受 `24`（默认）、`3`、`0`，控制决策消息重复展示的近期事件数量。完整、经过保密过滤的公开记录仍在会话中；只有确认会话已接收全部历史时才启用去重，否则恢复 24 条。统计记录包含请求/实际窗口，提示词版本也按窗口区分。切换影响之后的决策消息，已有消息不会重写，因此真实对照宜使用新对局。改回 `24` 可恢复原窗口。
+
+运行 `node scripts/compare-deepseek-observations.mjs 73` 可比较同一随机种子的四人完整对局：三种窗口使用相同合法动作，统计真实请求字节。脚本仅使用本地策略和假 API，不调用 DeepSeek，不测量真实 token、缓存命中、费用或棋力。
+
 生产入口为 `xmyc.dpdns.org`；`workers.dev` 和 Workers 预览地址已在配置中关闭。

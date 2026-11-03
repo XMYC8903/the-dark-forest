@@ -66,7 +66,7 @@ function cleanLegacySession(session) {
 }
 
 /** Ask DeepSeek to choose one server-generated legal action. Returns null on any API/format failure. */
-export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,session=null,onDecision=null,onMetrics=null) {
+export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,session=null,onDecision=null,onMetrics=null,options={}) {
   const started=Date.now(),metric={schemaVersion:1,promptVersion:'compact-cards-v2',model:'deepseek-flash',thinking:'enabled',reasoningEffort:'high',maxTokens:4096,apiCalled:false,status:'missing_key',phase:game.pending?.kind==='broadcast'?(game.pending.caster===me?'settle':'respond'):game.pending?.kind==='escape'?'escape':'turn',candidates:0};
   const emit=()=>{try{onMetrics?.({...metric,startedAt:started,durationMs:Date.now()-started});}catch{ /* Metrics must not affect play. */ }};
   if(!apiKey){emit();return null;}
@@ -76,6 +76,11 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
     Object.assign(session,safe);
   }
   cleanLegacySession(session);
+  const requestedWindow=[0,3,24,'0','3','24'].includes(options.observationWindow)?Number(options.observationWindow):24;
+  // Only deduplicate when the entire event history has already entered this
+  // seat's safe conversation. Standalone or stale sessions keep the old window.
+  const observationWindow=session?.privacyVersion===1&&session.intelCursor===history.length?requestedWindow:24;
+  Object.assign(metric,{requestedObservationWindow:requestedWindow,observationWindow,promptVersion:'compact-cards-v2-obs'+observationWindow});
   const actions=candidateActions(game,me);
   metric.candidates=actions.length;
   if(!actions.length){metric.status='no_actions';emit();return null;}
@@ -86,8 +91,8 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
   const legalActions=actions.map((action,choice)=>({choice,action,
     ...(action.cardId?{cardKey:pCardKey(game,me,action.cardId)}:{}),
     ...(action.ids?{cardKeys:action.ids.map(id=>pCardKey(game,me,id))}:{})}));
-  const observations=playerIntelView(history.slice(-24),me).map(e=>({type:e.type,actor:e.actor,target:e.target,...(e.key?{cardKey:e.key}:{})}));
-  const decisionMessage={role:'user',content:'现在请决策。卡牌 key 对应规则书的完整牌面；id 用于区分手牌，星系编号对应星图。只输出 JSON：{"choice":候选编号}。当前局面：'+JSON.stringify({me,state:publicState(view,me),observations,legalActions})};
+  const observations=playerIntelView(observationWindow?history.slice(-observationWindow):[],me).map(e=>({type:e.type,actor:e.actor,target:e.target,...(e.key?{cardKey:e.key}:{})}));
+  const decisionMessage={role:'user',content:'现在请决策。卡牌 key 对应规则书的完整牌面；id 用于区分手牌，星系编号对应星图。只输出 JSON：{"choice":候选编号}。当前局面：'+JSON.stringify({me,state:publicState(view,me),...(observationWindow?{observations}:{}),legalActions})};
   const conversation=session?.messages||[
     {role:'system',content:deepSeekRulebook()},
     {role:'user',content:'当前局面：'+JSON.stringify(publicState(view,me))}
