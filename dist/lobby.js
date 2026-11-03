@@ -68,8 +68,13 @@ function renderReplayList(items=[]){
   if(screen!=='replays')return;
   const host=$('#replay-list');if(!host)return;
   host.innerHTML=items.length?items.map(item=>`<article class="replay-list-item"><div class="replay-list-info"><b>${esc(item.name)}</b><small>${replayDate(item.finishedAt)} · ${esc(item.rounds)} 轮 · ${esc(item.players?.map(p=>p.name).join('、')||'文明未知')}</small></div><div class="replay-list-actions"><button class="secondary-btn" data-download-replay="${esc(item.matchId)}">下载</button><button class="primary-btn" data-open-replay="${esc(item.matchId)}">观看</button></div></article>`).join(''):'<p class="replay-empty">还没有已完成的对局回放。参与或观战的在线对局结束后，系统会自动保存最近 5 局。</p>';
-  host.querySelectorAll('[data-open-replay]').forEach(button=>button.onclick=()=>task(async()=>{const data=await api('/replays/'+button.dataset.openReplay);await startReplay(data.replay);}));
-  host.querySelectorAll('[data-download-replay]').forEach(button=>button.onclick=()=>task(async()=>{const data=await api('/replays/'+button.dataset.downloadReplay);downloadReplay(data.replay);}));
+  host.querySelectorAll('[data-open-replay]').forEach(button=>button.onclick=()=>task(()=>generateReplay(button,button.dataset.openReplay,startReplay)));
+  host.querySelectorAll('[data-download-replay]').forEach(button=>button.onclick=()=>task(()=>generateReplay(button,button.dataset.downloadReplay,downloadReplay)));
+}
+async function generateReplay(button,matchId,consume){
+  const label=button.textContent;button.textContent='生成回放...';button.disabled=true;button.setAttribute('aria-busy','true');
+  try{const data=await api('/replays/'+matchId);await consume(data.replay);}
+  finally{button.textContent=label;button.disabled=false;button.removeAttribute('aria-busy');}
 }
 async function loadReplayList(){
   try{const data=await api('/replays');renderReplayList(data.replays||[]);}
