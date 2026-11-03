@@ -66,8 +66,10 @@ function cleanLegacySession(session) {
 }
 
 /** Ask DeepSeek to choose one server-generated legal action. Returns null on any API/format failure. */
-export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,session=null,onDecision=null) {
-  if(!apiKey)return null;
+export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,session=null,onDecision=null,onMetrics=null) {
+  const started=Date.now(),metric={schemaVersion:1,promptVersion:'compact-cards-v2',model:'deepseek-flash',thinking:'enabled',reasoningEffort:'high',maxTokens:4096,apiCalled:false,status:'missing_key',phase:game.pending?.kind==='broadcast'?(game.pending.caster===me?'settle':'respond'):game.pending?.kind==='escape'?'escape':'turn',candidates:0};
+  const emit=()=>{try{onMetrics?.({...metric,startedAt:started,durationMs:Date.now()-started});}catch{ /* Metrics must not affect play. */ }};
+  if(!apiKey){emit();return null;}
   if(session&&session.privacyVersion!==1){
     const safe=newDeepSeekSession(game,me,history);
     for(const key of Object.keys(session))delete session[key];
@@ -75,8 +77,9 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
   }
   cleanLegacySession(session);
   const actions=candidateActions(game,me);
-  if(!actions.length)return null;
-  if(actions.length===1){onDecision?.({actionType:actions[0].type,source:'forced',choice:null,candidates:1});return actions[0];}
+  metric.candidates=actions.length;
+  if(!actions.length){metric.status='no_actions';emit();return null;}
+  if(actions.length===1){metric.status='forced';metric.actionType=actions[0].type;emit();onDecision?.({actionType:actions[0].type,source:'forced',choice:null,candidates:1});return actions[0];}
   const view=gameView(game,me);
   // The bot knows the face it played; no other pending card face is exposed.
   if(game.pending?.kind==='broadcast')view.ownBroadcastKey=game.pending.caster===me?game.pending.card.key:game.pending.responses.find(r=>r.actor===me)?.card.key;
@@ -92,23 +95,33 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
   const messages=session?.messages||conversation;
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
   const requestBody={model:'deepseek-flash',thinking:{type:'enabled'},reasoning_effort:'high',max_tokens:4096,response_format:{type:'json_object'},messages:[...messages,decisionMessage]};
+  const body=JSON.stringify(requestBody),bytes=value=>new TextEncoder().encode(value).byteLength;
+  Object.assign(metric,{apiCalled:true,status:'request_error',requestBytes:bytes(body),messageCount:requestBody.messages.length,systemBytes:requestBody.messages.filter(m=>m.role==='system').reduce((n,m)=>n+bytes(m.content),0),decisionBytes:bytes(decisionMessage.content),historyBytes:messages.filter(m=>m.role!=='system').reduce((n,m)=>n+bytes(m.content),0)});
   try {
     const response=await fetchImpl('https://api.deepseek.com/chat/completions',{
       method:'POST',headers:{'Authorization':'Bearer '+apiKey,'Content-Type':'application/json'},signal:controller.signal,
-      body:JSON.stringify(requestBody)
+      body
     });
     const raw=await response.text();
-    if(!response.ok){console.warn('DeepSeek API returned status',response.status);return null;}
+    metric.httpStatus=response.status;
+    if(!response.ok){metric.status='http_error';console.warn('DeepSeek API returned status',response.status);return null;}
+    metric.status='invalid_response';
     const data=JSON.parse(raw);const content=data?.choices?.[0]?.message?.content;
-    if(typeof content!=='string'){console.warn('DeepSeek API returned no message content');return null;}
-    if(data?.choices?.[0]?.finish_reason==='length'){console.warn('DeepSeek API output was truncated');return null;}
+    if(typeof data.model==='string'&&/^deepseek-[a-z0-9._-]{1,80}$/i.test(data.model))metric.responseModel=data.model;
+    const count=value=>Number.isSafeInteger(value)&&value>=0?value:null;
+    metric.usage={promptTokens:count(data.usage?.prompt_tokens),cacheHitTokens:count(data.usage?.prompt_cache_hit_tokens??data.usage?.prompt_tokens_details?.cached_tokens),cacheMissTokens:count(data.usage?.prompt_cache_miss_tokens),completionTokens:count(data.usage?.completion_tokens),reasoningTokens:count(data.usage?.completion_tokens_details?.reasoning_tokens),totalTokens:count(data.usage?.total_tokens)};
+    metric.finishReason=['stop','length','content_filter','tool_calls'].includes(data?.choices?.[0]?.finish_reason)?data.choices[0].finish_reason:'unknown';
+    if(typeof content!=='string'){metric.status='missing_content';console.warn('DeepSeek API returned no message content');return null;}
+    if(data?.choices?.[0]?.finish_reason==='length'){metric.status='truncated';console.warn('DeepSeek API output was truncated');return null;}
+    metric.status='invalid_choice';
     const result=JSON.parse(content),choice=result.choice;
     if(!Number.isInteger(choice)||choice<0||choice>=actions.length){console.warn('DeepSeek API returned an invalid action choice');return null;}
     const saved=JSON.stringify({choice});
     if(session?.messages)session.messages.push(decisionMessage,{role:'assistant',content:saved});
+    Object.assign(metric,{status:'success',actionType:actions[choice].type,choice});
     onDecision?.({actionType:actions[choice].type,source:'model',choice,candidates:actions.length});
     return actions[choice];
-  } catch(error){console.warn('DeepSeek API request failed',error?.name||'unknown error');return null;} finally{clearTimeout(timer);}
+  } catch(error){if(error?.name==='AbortError')metric.status='timeout';console.warn('DeepSeek API request failed',error?.name||'unknown error');return null;} finally{clearTimeout(timer);emit();}
 }
 
 function pCardKey(game,me,id){return game.players[me].hand.find(c=>c.id===id)?.key;}

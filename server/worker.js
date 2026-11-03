@@ -211,8 +211,8 @@ export class GameRoom {
         requireThat(matchId&&/^[a-f0-9-]{36}$/.test(matchId),'请指定有效的 match ID');
         const kind=url.searchParams.get('kind')==='deepseek'?'deepseek':'game',cursor=url.searchParams.get('cursor')||'';
         const records=await this.ctx.storage.list({prefix:`audit:${matchId}:${kind}:`,...(cursor?{startAfter:cursor}:{}),limit:1000});
-        const metadata=[...records].filter(([key,value])=>!key.includes(':part:')&&value.parts).slice(0,20);
-        return json({room:this.room?.id,matchId,kind,entries:await Promise.all(metadata.map(([key,value])=>readLog(this.ctx.storage,key,value))),nextCursor:metadata.length===20?metadata.at(-1)[0]+':part:zzzz':null});
+        const metadata=[...records].filter(([key,value])=>!key.includes(':part:')&&(value.parts||value.schemaVersion===1)).slice(0,20);
+        return json({room:this.room?.id,matchId,kind,entries:await Promise.all(metadata.map(([key,value])=>value.parts?readLog(this.ctx.storage,key,value):value)),nextCursor:metadata.length===20?(metadata.at(-1)[1].parts?metadata.at(-1)[0]+':part:zzzz':metadata.at(-1)[0]):null});
       }
       if(pathname==='/init') {
         return await this.ctx.blockConcurrencyWhile(async()=>{
@@ -428,12 +428,12 @@ export class GameRoom {
     });
     if(!deepseekTask)return;
 
-    let action=null;
+    let action=null,metric=null,applied=false,fallback=false;
     try {
-      action=await decideDeepSeek(deepseekTask.game,deepseekTask.player,deepseekTask.intel,this.env.DEEPSEEK_API_KEY,fetch,deepseekTask.session);
+      action=await decideDeepSeek(deepseekTask.game,deepseekTask.player,deepseekTask.intel,this.env.DEEPSEEK_API_KEY,fetch,deepseekTask.session,null,value=>{metric=value;});
     }catch(error){console.warn('DeepSeek decision failed',error?.message||'unknown error');}
 
-    await this.ctx.blockConcurrencyWhile(async()=>{
+    try{await this.ctx.blockConcurrencyWhile(async()=>{
       if(this.room?.aiThinking?.token!==deepseekTask.token)return;
       if(this.room.revision!==deepseekTask.revision){
         this.room.aiThinking=null;this.room.revision++;this.room.updatedAt=Date.now();await this.commit();return;
@@ -441,16 +441,23 @@ export class GameRoom {
       const backup=serialized(this.room);
       try {
         if(deepseekTask.session?.messages)this.room.deepseekSessions[deepseekTask.sessionId]=deepseekTask.session;
-        if(!action){console.warn('DeepSeek unavailable; using local Zhizi policy');action=decideAI(gameView(this.room.game,deepseekTask.player),deepseekTask.player,'hard',this.room.intel);}
+        if(!action){fallback=true;console.warn('DeepSeek unavailable; using local Zhizi policy');action=decideAI(gameView(this.room.game,deepseekTask.player),deepseekTask.player,'hard',this.room.intel);}
         if(!action)throw new Error('AI 没有生成有效行动');
         this.room.aiThinking=null;
         applyGameAction(this.room,deepseekTask.player,action);
         this.room.revision++;this.room.updatedAt=Date.now();await this.commit({operation:'deepseek-action',actor:deepseekTask.player,action});
+        applied=true;
       }catch(error){
         this.room=revived(backup);this.room.aiThinking=null;this.room.revision++;this.room.updatedAt=Date.now();
         console.error('AI action failed',error.message);await this.commit();
       }
-    });
+    });}finally{
+      if(metric){
+        const at=Date.now(),key=`audit:${deepseekTask.matchId}:deepseek:${String(at).padStart(13,'0')}:${deepseekTask.token}`;
+        const record={...metric,kind:'deepseek',matchId:deepseekTask.matchId,at,player:deepseekTask.player,revision:deepseekTask.revision,round:deepseekTask.game.round,applied,fallback,appliedActionType:applied?action.type:null};
+        this.ctx.waitUntil(this.ctx.storage.put(key,record).catch(()=>console.warn('DeepSeek metrics could not be saved')));
+      }
+    }
   }
   webSocketMessage(ws,message) {
     if(message==='ping')ws.send('pong');

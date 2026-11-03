@@ -31,4 +31,8 @@ Worker 配置位于 `wrangler.jsonc`，入口是 `server/worker.js`，共享规�
 
 线上后台日志可能包含隐藏牌局信息，只能通过管理员密钥读取。`pnpm logs` 列出对局索引，具体导出参数见 `scripts/export-private-logs.mjs`；不要提交密钥或导出的私有日志。
 
+DeepSeek 只记录统计数据：对局/座位、提示词版本、决策阶段、请求字节与消息数、耗时、API token 用量和缓存命中、失败类别、是否回退及行动是否应用。每次决策保存一条独立的小记录，不保存提示词、响应正文、思考内容或密钥。用量缺失表示未知，不按零计费；推理 token 属于输出 token 的子集，不能重复相加。旧的完整 DeepSeek 日志不会恢复。
+
+导出：`node scripts/export-private-logs.mjs 房间码 对局ID deepseek`。汇总：`node scripts/summarize-deepseek.mjs artifacts/private-logs/文件名.json`（可指定多个文件，重叠记录去重）。汇总包含阶段/提示词版本分组、用量及其已知/未知调用数、缓存命中率、耗时和回退次数；实际费用还需结合调用时适用的价格，字节数不等于 token 数。规则表压缩只对新建的系统消息生效，进行中对局可能沿用旧系统消息，比较时也应参考记录中的 systemBytes。
+
 生产入口为 `xmyc.dpdns.org`；`workers.dev` 和 Workers 预览地址已在配置中关闭。
