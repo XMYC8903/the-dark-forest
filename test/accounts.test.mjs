@@ -1,198 +1,645 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {AccountHub,randomCode} from '../server/accounts.js';
-import worker,{GameRoom} from '../server/worker.js';
-import {newRoom,saveGame} from '../server/room-core.js';
-import {logParts,readLog} from '../server/private-logs.js';
-import {Game} from '../shared/game.js';
-import {decideDeepSeek} from '../server/deepseek.js';
+import { AccountHub, randomCode } from '../server/accounts.js';
+import worker, { GameRoom } from '../server/worker.js';
+import { newRoom, saveGame } from '../server/room-core.js';
+import { logParts, readLog } from '../server/private-logs.js';
+import { Game } from '../shared/game.js';
+import { decideDeepSeek } from '../server/deepseek.js';
 class Storage {
-  map=new Map();
-  async get(key){return Array.isArray(key)?new Map(key.filter(k=>this.map.has(k)).map(k=>[k,structuredClone(this.map.get(k))])):structuredClone(this.map.get(key));}
-  async put(key,value){for(const [k,v] of typeof key==='object'?Object.entries(key):[[key,value]])this.map.set(k,structuredClone(v));}
-  async delete(key){if(Array.isArray(key)){for(const k of key)this.map.delete(k);}else this.map.delete(key);}
-  async list({prefix='',startAfter='',limit=10000}={}){return new Map([...this.map].filter(([k])=>k.startsWith(prefix)&&k>startAfter).sort(([a],[b])=>a.localeCompare(b)).slice(0,limit));}
-}
-function fixture(){
-  const storage=new Storage(),ctx={storage,blockConcurrencyWhile:fn=>fn()},hub=new AccountHub(ctx,{AUTH_PEPPER:'test-only-not-a-real-secret'});
-  let seq=0;
-  const call=async(path,body={},token='')=>{const r=await hub.fetch(new Request('https://internal'+path,{method:'POST',headers:{'x-auth-token':token,'x-client-ip':'test-'+seq++},body:JSON.stringify(body)}));return {status:r.status,...await r.json()};};
-  const register=(name)=>call('/auth/register',{name,password:'test-password-123'});return {storage,call,register,hub};
-}
-test('回放按账号授权从对局日志生成，复用房间后仍可读取，旧回放保持兼容',async()=>{
-  const f=fixture(),alice=await f.register('回放甲'),bob=await f.register('回放乙'),outsider=await f.register('回放丙');
-  const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const job=fn();jobs.push(job);return job;}};
-  const rooms={idFromName:id=>id,get:()=>room},accounts={idFromName:id=>id,get:()=>f.hub};
-  const room=new GameRoom(ctx,{ACCOUNTS:accounts});await jobs.at(-1);
-  const getReplay=async(token,id)=>{const response=await worker.fetch(new Request('https://game.test/api/replays/'+id,{headers:{Cookie:'df_session='+token}}),{ACCOUNTS:accounts,ROOMS:rooms});return {status:response.status,...await response.json()};};
-  const matchId=crypto.randomUUID(),game=new Game({count:3,demo:false});
-  const initial={kind:'game',matchId,at:100,revision:1,operation:'start',initial:true,state:saveGame(game),intelDelta:[]};
-  game.players[0].energy+=2;game.over=true;game.winner=0;
-  const final={kind:'game',matchId,at:200,revision:2,operation:'action',state:saveGame(game),intelDelta:[{type:'production',player:0}],motion:{sequence:1,events:[],energyChanges:[]}};
-  for(const record of [initial,final])await storage.put(logParts(`audit:${matchId}:game:${String(record.revision).padStart(12,'0')}`,record));
-  room.room={...newRoom('A2C4E6','host','测试房间','回放甲',50),matchId,status:'finished',game,members:[{id:'host',name:'回放甲',accountId:alice.account.id},{id:'bot',name:'机器人',bot:'easy'}],replayAccountIds:[alice.account.id,bob.account.id]};
-  assert.equal((await room.saveReplayArchive()).saved,2);
-  assert.equal([...f.storage.map.keys()].filter(k=>k.startsWith('replay-data:')).length,0);
-  const before=await f.storage.get(`replay-index:${alice.account.id}:${matchId}`);
-  await room.saveReplayArchive();assert.deepEqual(await f.storage.get(`replay-index:${alice.account.id}:${matchId}`),before);
-  room.room=newRoom('A2C4E6','other','新对局','新房主');
-  assert.equal((await getReplay(outsider.token,matchId)).status,404);
-  const result=await getReplay(alice.token,matchId);
-  assert.equal(result.status,200);assert.equal(result.replay.frames.length,2);assert.equal(result.replay.events.length,1);
-  assert.equal(result.replay.frames[1].game.players[0].energy,game.players[0].energy);
-  assert.equal(result.replay.frames[1].game.players[0].hand.length,4);
-  assert.equal((await getReplay(bob.token,matchId)).replay.matchId,matchId);
-  const legacy={format:'dark-forest-replay',version:1,matchId:crypto.randomUUID(),name:'旧回放',players:[],events:[],frames:[]};
-  await f.call('/internal/replay-save',{accountIds:[alice.account.id],replay:legacy});
-  assert.deepEqual((await getReplay(alice.token,legacy.matchId)).replay,legacy);
-  await f.call('/internal/replay-save',{accountIds:[bob.account.id],replay:{...legacy,matchId}});
-  assert.equal((await f.storage.get(`replay-index:${bob.account.id}:${matchId}`)).source,'game-log');
-  for(let i=0;i<5;i++)await f.call('/internal/replay-reference',{accountIds:[alice.account.id],reference:{matchId:crypto.randomUUID(),roomId:'A2C4E6',finishedAt:Date.now()+i+100,players:[]}});
-  assert.equal((await f.call('/replays/list',{},alice.token)).replays.length,5);
-  assert.equal((await getReplay(alice.token,legacy.matchId)).status,404);
-  assert.equal([...f.storage.map.keys()].some(k=>k.includes(legacy.matchId)),false);
-  for(const key of [...storage.map.keys()])if(key.startsWith(`audit:${matchId}:game:`))await storage.delete(key);
-  assert.equal((await getReplay(bob.token,matchId)).status,404);
-});
-test('账号与房间码固定长度且同时包含字母和数字',()=>{
-  const ids=new Set();for(let i=0;i<2000;i++){const code=randomCode(i%2?6:8);assert.match(code,/^[A-Z0-9]+$/);assert.match(code,/[A-Z]/);assert.match(code,/\d/);assert.equal(code.length,i%2?6:8);ids.add(code);}assert.equal(ids.size,2000);
-});
-test('密码加盐保存，账号名唯一，跨会话登录回到相同 ID',async()=>{
-  const f=fixture(),a=await f.register('罗辑账号');assert.equal(a.status,201);assert.equal(a.account.id.length,8);
-  const stored=await f.storage.get('account:'+a.account.id);assert.equal(stored.password,undefined);assert.equal(stored.hash.length,64);assert.notEqual(stored.hash,'test-password-123');
-  assert.equal((await f.register('罗辑账号')).status,409);
-  const bad=await f.call('/auth/login',{name:'罗辑账号',password:'wrong-password'});assert.equal(bad.status,401);
-  const login=await f.call('/auth/login',{name:'罗辑账号',password:'test-password-123'});assert.equal(login.account.id,a.account.id);assert.notEqual(login.token,a.token);
-  const resolved=await f.call('/internal/resolve',{token:login.token});assert.deepEqual(resolved.account,a.account);assert.equal(JSON.stringify(resolved).includes(stored.hash),false);
-  await f.call('/auth/logout',{},login.token);assert.equal((await f.call('/internal/resolve',{token:login.token})).account,null);
-  assert.ok((await f.call('/internal/resolve',{token:a.token})).account);
-});
-test('名称规范化避免重复，拒绝短密码与未登录读取',async()=>{
-  const f=fixture();await f.register('Alice');assert.equal((await f.register('ＡＬＩＣＥ')).status,409);
-  assert.equal((await f.call('/auth/register',{name:'新账号',password:'123'})).status,400);
-  assert.equal((await f.call('/social/state')).status,401);
-});
-test('好友需本人同意，旁人不能接受申请，拒绝与重复申请可处理',async()=>{
-  const f=fixture(),a=await f.register('好友甲'),b=await f.register('好友乙'),c=await f.register('旁观者');
-  assert.equal((await f.call('/social/request',{id:b.account.id},a.token)).status,200);
-  assert.equal((await f.call('/social/state',{},a.token)).friends.length,0);
-  assert.equal((await f.call('/social/respond',{id:a.account.id,accept:true},c.token)).status,409);
-  assert.equal((await f.call('/social/respond',{id:a.account.id,accept:true},b.token)).status,200);
-  assert.equal((await f.call('/social/state',{},a.token)).friends[0].id,b.account.id);
-  assert.equal((await f.call('/social/state',{},b.token)).friends[0].id,a.account.id);
-  assert.equal((await f.call('/social/request',{id:a.account.id},a.token)).status,400);
-});
-test('状态区分在线离线对局观战，普通搜索不泄漏非好友状态',async()=>{
-  const f=fixture(),a=await f.register('状态甲'),b=await f.register('状态乙');
-  assert.equal((await f.call('/social/profile',{id:b.account.id},a.token)).status,null);
-  assert.equal((await f.call('/social/profile',{id:b.account.id},a.token)).relationship,'none');
-  await f.call('/social/request',{id:b.account.id},a.token);await f.call('/social/respond',{id:a.account.id,accept:true},b.token);
-  const state=()=>f.call('/social/state',{},a.token);
-  assert.equal((await state()).friends[0].status,'online');
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:1,status:'waiting',members:[{accountId:b.account.id}],spectator:null}});
-  assert.equal((await state()).friends[0].status,'in_room');
-  assert.equal((await f.call('/social/invite',{id:b.account.id,room:'B2C4E6'},a.token)).status,403);
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:2,status:'playing',members:[{accountId:b.account.id}],spectator:null}});
-  assert.equal((await state()).friends[0].status,'playing');
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:3,status:'playing',members:[],spectator:{accountId:b.account.id}}});
-  assert.equal((await state()).friends[0].status,'spectating');
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:1,status:'playing',members:[{accountId:b.account.id}],spectator:null}});
-  assert.equal((await state()).friends[0].status,'spectating');
-  await f.call('/auth/logout',{},b.token);assert.equal((await state()).friends[0].status,'offline');
-});
-test('邀请只允许好友且不能冒领；预览不消费，成功加入后才消费',async()=>{
-  const f=fixture(),a=await f.register('邀请甲'),b=await f.register('邀请乙');
-  assert.equal((await f.call('/social/invite',{id:b.account.id,room:'A2C4E6'},a.token)).status,403);
-  await f.call('/social/request',{id:b.account.id},a.token);await f.call('/social/respond',{id:a.account.id,accept:true},b.token);
-  await f.call('/social/invite',{id:b.account.id,room:'A2C4E6',roomName:'好友房'},a.token);
-  assert.equal((await f.call('/social/invite',{id:b.account.id,room:'A2C4E6'},a.token)).status,429);
-  assert.ok((await f.call('/social/state',{},a.token)).inviteCooldowns[b.account.id]>Date.now());
-  const now=Date.now;Date.now=()=>now()+10001;try{assert.equal((await f.call('/social/invite',{id:b.account.id,room:'A2C4E6'},a.token)).status,200);}finally{Date.now=now;}
-  const i=(await f.call('/social/state',{},b.token)).invites[0];assert.equal(i.fromName,a.account.name);
-  assert.equal((await f.call('/social/invitation',{id:i.id,accept:true},a.token)).status,409);
-  assert.equal((await f.call('/social/invitation',{id:i.id,accept:true},b.token)).invite.room,'A2C4E6');
-  assert.equal((await f.call('/social/state',{},b.token)).invites.length,1);
-  await f.call('/social/invitation',{id:i.id,consume:true},b.token);assert.equal((await f.call('/social/state',{},b.token)).invites.length,0);
-});
-test('只有好友的进行中对局可以通过好友观战',async()=>{
-  const f=fixture(),a=await f.register('观战甲'),b=await f.register('观战乙'),c=await f.register('观战丙');
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:1,status:'playing',members:[{accountId:b.account.id}],spectator:null}});
-  assert.equal((await f.call('/social/watch-friend',{id:b.account.id},a.token)).status,403);
-  await f.call('/social/request',{id:b.account.id},a.token);await f.call('/social/respond',{id:a.account.id,accept:true},b.token);
-  assert.deepEqual((await f.call('/social/watch-friend',{id:b.account.id},a.token)).room,'A2C4E6');
-  assert.equal((await f.call('/social/watch-friend',{id:b.account.id},c.token)).status,403);
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:2,status:'playing',members:[],spectator:{accountId:b.account.id}}});
-  assert.equal((await f.call('/social/watch-friend',{id:b.account.id},a.token)).room,'A2C4E6');
-  await f.call('/internal/presence',{room:{id:'A2C4E6',revision:3,status:'finished',members:[{accountId:b.account.id}],spectator:null}});
-  assert.equal((await f.call('/social/watch-friend',{id:b.account.id},a.token)).status,409);
-});
-test('登录尝试有限流，退出的会话不可继续访问好友接口',async()=>{
-  const f=fixture(),a=await f.register('限流账号');
-  for(let i=0;i<11;i++)assert.equal((await f.call('/auth/login',{name:'限流账号',password:'bad-password'})).status,401);
-  assert.equal((await f.call('/auth/login',{name:'限流账号',password:'test-password-123'})).status,429);
-  await f.call('/auth/logout',{},a.token);assert.equal((await f.call('/social/state',{},a.token)).status,401);
-});
-test('不同房间码共用账号的加入频率限制',async()=>{
-  const f=fixture(),a=await f.register('加入限流甲'),b=await f.register('加入限流乙');
-  for(let i=0;i<40;i++)assert.equal((await f.call('/internal/room-access',{id:a.account.id,room:'ROOM'+i})).status,200);
-  assert.equal((await f.call('/internal/room-access',{id:a.account.id,room:'OTHER'})).status,429);
-  assert.equal((await f.call('/internal/room-access',{id:b.account.id,room:'OTHER'})).status,200);
-});
-test('日志分片完整保留中文大提示词，后台接口拒绝普通用户和跨域',async()=>{
-  const store=new Storage(),data={kind:'deepseek',matchId:crypto.randomUUID(),request:{messages:[{role:'system',content:'三体规则🚀'.repeat(20000)}]},response:{choices:[{message:{content:'{"choice":2}',reasoning_content:'模型思考'}}]}};
-  const parts=logParts('audit:test',data);assert.ok(Object.keys(parts).length>3);await store.put(parts);assert.deepEqual(await readLog(store,'audit:test',parts['audit:test']),data);
-  for(const value of Object.values(parts))assert.ok(new TextEncoder().encode(JSON.stringify(value)).byteLength<128000);
-  assert.equal((await worker.fetch(new Request('https://game.test/api/admin/logs'),{ADMIN_LOG_TOKEN:'secret'})).status,403);
-  assert.equal((await worker.fetch(new Request('https://game.test/api/auth/login',{method:'POST',headers:{Origin:'https://attacker.test'},body:'{}'}),{})).status,403);
-});
-test('DeepSeek 决策正常执行，但不再生成请求和响应审计日志',async()=>{
-  const game=new Game({count:3}),entries=[];let sent;
-  const action=await decideDeepSeek(game,0,[],'private-secret',async(url,options)=>{sent=JSON.parse(options.body);return Response.json({choices:[{message:{content:'{"choice":0}',reasoning_content:'思考过程'},finish_reason:'stop'}],usage:{total_tokens:42}});},null,null,entry=>entries.push(entry));
-  assert.ok(action);assert.ok(sent.messages.length);assert.equal(entries.length,1);assert.equal(entries[0].status,'success');assert.equal(entries[0].usage.totalTokens,42);assert.equal(entries[0].usage.promptTokens,null);
-  const encoded=JSON.stringify(entries);assert.equal(encoded.includes('思考过程'),false);assert.equal(encoded.includes('private-secret'),false);assert.equal(encoded.includes('messages'),false);
-});
-test('DeepSeek HTTP 失败时回退，不再保存错误响应日志',async()=>{
-  const entries=[],action=await decideDeepSeek(new Game({count:3}),0,[],'key',async()=>new Response('quota exceeded',{status:429}),null,null,e=>entries.push(e));
-  assert.equal(action,null);assert.equal(entries.length,1);assert.equal(entries[0].status,'http_error');assert.equal(entries[0].httpStatus,429);assert.equal(JSON.stringify(entries).includes('quota exceeded'),false);
-});
-test('房间只保存单键统计记录，管理员日志接口可读取且普通用户不可访问',async()=>{
-  const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const job=fn();jobs.push(job);return job;},waitUntil:job=>jobs.push(job)};
-  const room=new GameRoom(ctx,{DEEPSEEK_API_KEY:'secret'});await jobs[0];
-  room.room={...newRoom('A2C4E6','bot','测试','bot'),status:'playing',matchId:crypto.randomUUID(),game:new Game({count:3,demo:false}),members:[{id:'bot',name:'bot',bot:'deepseek'},{id:'a',name:'a'},{id:'b',name:'b'}]};
-  room.commit=async()=>{};
-  const original=globalThis.fetch;globalThis.fetch=async()=>Response.json({choices:[{message:{content:'{"choice":0}'}}],usage:{prompt_tokens:123}});
-  try{await room.alarm();await Promise.all(jobs);}finally{globalThis.fetch=original;}
-  const logs=[...storage.map].filter(([key])=>key.startsWith('audit:'));
-  assert.equal(logs.length,1);assert.equal(logs[0][0].includes(':part:'),false);assert.equal(logs[0][1].applied,true);assert.equal(logs[0][1].usage.promptTokens,123);
-  const response=await room.fetch(new Request('https://internal/internal/logs?kind=deepseek'));
-  assert.equal(response.status,200);assert.equal((await response.json()).entries.length,1);
-  assert.equal((await worker.fetch(new Request('https://game.test/api/admin/logs/A2C4E6?kind=deepseek'),{ADMIN_LOG_TOKEN:'secret'})).status,403);
-});
-test('DeepSeek 指标按对局保留最近十局，不删除对局日志及回放',async()=>{
-  const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const job=fn();jobs.push(job);return job;}};
-  const room=new GameRoom(ctx,{});await jobs[0];const matches=Array.from({length:11},()=>crypto.randomUUID());
-  for(let i=0;i<matches.length;i++){
-    const id=matches[i],record={schemaVersion:1,kind:'deepseek',matchId:id,at:i+1};
-    await storage.put(`audit:${id}:game:0001`,{parts:1});
-    await room.recordDeepseekMetric(`audit:${id}:deepseek:0001:metric`,record);
+  map = new Map();
+  async get(key) {
+    return Array.isArray(key)
+      ? new Map(
+          key.filter((k) => this.map.has(k)).map((k) => [k, structuredClone(this.map.get(k))])
+        )
+      : structuredClone(this.map.get(key));
   }
-  assert.equal(await storage.get(`audit:${matches[0]}:deepseek:0001:metric`),undefined);
+  async put(key, value) {
+    for (const [k, v] of typeof key === 'object' ? Object.entries(key) : [[key, value]])
+      this.map.set(k, structuredClone(v));
+  }
+  async delete(key) {
+    if (Array.isArray(key)) {
+      for (const k of key) this.map.delete(k);
+    } else this.map.delete(key);
+  }
+  async list({ prefix = '', startAfter = '', limit = 10000 } = {}) {
+    return new Map(
+      [...this.map]
+        .filter(([k]) => k.startsWith(prefix) && k > startAfter)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(0, limit)
+    );
+  }
+}
+function fixture() {
+  const storage = new Storage(),
+    ctx = { storage, blockConcurrencyWhile: (fn) => fn() },
+    hub = new AccountHub(ctx, { AUTH_PEPPER: 'test-only-not-a-real-secret' });
+  let seq = 0;
+  const call = async (path, body = {}, token = '') => {
+    const r = await hub.fetch(
+      new Request('https://internal' + path, {
+        method: 'POST',
+        headers: { 'x-auth-token': token, 'x-client-ip': 'test-' + seq++ },
+        body: JSON.stringify(body)
+      })
+    );
+    return { status: r.status, ...(await r.json()) };
+  };
+  const register = (name) => call('/auth/register', { name, password: 'test-password-123' });
+  return { storage, call, register, hub };
+}
+test('回放按账号授权从对局日志生成，复用房间后仍可读取，旧回放保持兼容', async () => {
+  const f = fixture(),
+    alice = await f.register('回放甲'),
+    bob = await f.register('回放乙'),
+    outsider = await f.register('回放丙');
+  const storage = new Storage(),
+    jobs = [],
+    ctx = {
+      storage,
+      blockConcurrencyWhile: (fn) => {
+        const job = fn();
+        jobs.push(job);
+        return job;
+      }
+    };
+  const rooms = { idFromName: (id) => id, get: () => room },
+    accounts = { idFromName: (id) => id, get: () => f.hub };
+  const room = new GameRoom(ctx, { ACCOUNTS: accounts });
+  await jobs.at(-1);
+  const getReplay = async (token, id) => {
+    const response = await worker.fetch(
+      new Request('https://game.test/api/replays/' + id, {
+        headers: { Cookie: 'df_session=' + token }
+      }),
+      { ACCOUNTS: accounts, ROOMS: rooms }
+    );
+    return { status: response.status, ...(await response.json()) };
+  };
+  const matchId = crypto.randomUUID(),
+    game = new Game({ count: 3, demo: false });
+  const initial = {
+    kind: 'game',
+    matchId,
+    at: 100,
+    revision: 1,
+    operation: 'start',
+    initial: true,
+    state: saveGame(game),
+    intelDelta: []
+  };
+  game.players[0].energy += 2;
+  game.over = true;
+  game.winner = 0;
+  const final = {
+    kind: 'game',
+    matchId,
+    at: 200,
+    revision: 2,
+    operation: 'action',
+    state: saveGame(game),
+    intelDelta: [{ type: 'production', player: 0 }],
+    motion: { sequence: 1, events: [], energyChanges: [] }
+  };
+  for (const record of [initial, final])
+    await storage.put(
+      logParts(`audit:${matchId}:game:${String(record.revision).padStart(12, '0')}`, record)
+    );
+  room.room = {
+    ...newRoom('A2C4E6', 'host', '测试房间', '回放甲', 50),
+    matchId,
+    status: 'finished',
+    game,
+    members: [
+      { id: 'host', name: '回放甲', accountId: alice.account.id },
+      { id: 'bot', name: '机器人', bot: 'easy' }
+    ],
+    replayAccountIds: [alice.account.id, bob.account.id]
+  };
+  assert.equal((await room.saveReplayArchive()).saved, 2);
+  assert.equal([...f.storage.map.keys()].filter((k) => k.startsWith('replay-data:')).length, 0);
+  const before = await f.storage.get(`replay-index:${alice.account.id}:${matchId}`);
+  await room.saveReplayArchive();
+  assert.deepEqual(await f.storage.get(`replay-index:${alice.account.id}:${matchId}`), before);
+  room.room = newRoom('A2C4E6', 'other', '新对局', '新房主');
+  assert.equal((await getReplay(outsider.token, matchId)).status, 404);
+  const result = await getReplay(alice.token, matchId);
+  assert.equal(result.status, 200);
+  assert.equal(result.replay.frames.length, 2);
+  assert.equal(result.replay.events.length, 1);
+  assert.equal(result.replay.frames[1].game.players[0].energy, game.players[0].energy);
+  assert.equal(result.replay.frames[1].game.players[0].hand.length, 4);
+  assert.equal((await getReplay(bob.token, matchId)).replay.matchId, matchId);
+  const legacy = {
+    format: 'dark-forest-replay',
+    version: 1,
+    matchId: crypto.randomUUID(),
+    name: '旧回放',
+    players: [],
+    events: [],
+    frames: []
+  };
+  await f.call('/internal/replay-save', { accountIds: [alice.account.id], replay: legacy });
+  assert.deepEqual((await getReplay(alice.token, legacy.matchId)).replay, legacy);
+  await f.call('/internal/replay-save', {
+    accountIds: [bob.account.id],
+    replay: { ...legacy, matchId }
+  });
+  assert.equal(
+    (await f.storage.get(`replay-index:${bob.account.id}:${matchId}`)).source,
+    'game-log'
+  );
+  for (let i = 0; i < 5; i++)
+    await f.call('/internal/replay-reference', {
+      accountIds: [alice.account.id],
+      reference: {
+        matchId: crypto.randomUUID(),
+        roomId: 'A2C4E6',
+        finishedAt: Date.now() + i + 100,
+        players: []
+      }
+    });
+  assert.equal((await f.call('/replays/list', {}, alice.token)).replays.length, 5);
+  assert.equal((await getReplay(alice.token, legacy.matchId)).status, 404);
+  assert.equal(
+    [...f.storage.map.keys()].some((k) => k.includes(legacy.matchId)),
+    false
+  );
+  for (const key of [...storage.map.keys()])
+    if (key.startsWith(`audit:${matchId}:game:`)) await storage.delete(key);
+  assert.equal((await getReplay(bob.token, matchId)).status, 404);
+});
+test('账号与房间码固定长度且同时包含字母和数字', () => {
+  const ids = new Set();
+  for (let i = 0; i < 2000; i++) {
+    const code = randomCode(i % 2 ? 6 : 8);
+    assert.match(code, /^[A-Z0-9]+$/);
+    assert.match(code, /[A-Z]/);
+    assert.match(code, /\d/);
+    assert.equal(code.length, i % 2 ? 6 : 8);
+    ids.add(code);
+  }
+  assert.equal(ids.size, 2000);
+});
+test('密码加盐保存，账号名唯一，跨会话登录回到相同 ID', async () => {
+  const f = fixture(),
+    a = await f.register('罗辑账号');
+  assert.equal(a.status, 201);
+  assert.equal(a.account.id.length, 8);
+  const stored = await f.storage.get('account:' + a.account.id);
+  assert.equal(stored.password, undefined);
+  assert.equal(stored.hash.length, 64);
+  assert.notEqual(stored.hash, 'test-password-123');
+  assert.equal((await f.register('罗辑账号')).status, 409);
+  const bad = await f.call('/auth/login', { name: '罗辑账号', password: 'wrong-password' });
+  assert.equal(bad.status, 401);
+  const login = await f.call('/auth/login', { name: '罗辑账号', password: 'test-password-123' });
+  assert.equal(login.account.id, a.account.id);
+  assert.notEqual(login.token, a.token);
+  const resolved = await f.call('/internal/resolve', { token: login.token });
+  assert.deepEqual(resolved.account, a.account);
+  assert.equal(JSON.stringify(resolved).includes(stored.hash), false);
+  await f.call('/auth/logout', {}, login.token);
+  assert.equal((await f.call('/internal/resolve', { token: login.token })).account, null);
+  assert.ok((await f.call('/internal/resolve', { token: a.token })).account);
+});
+test('名称规范化避免重复，拒绝短密码与未登录读取', async () => {
+  const f = fixture();
+  await f.register('Alice');
+  assert.equal((await f.register('ＡＬＩＣＥ')).status, 409);
+  assert.equal((await f.call('/auth/register', { name: '新账号', password: '123' })).status, 400);
+  assert.equal((await f.call('/social/state')).status, 401);
+});
+test('好友需本人同意，旁人不能接受申请，拒绝与重复申请可处理', async () => {
+  const f = fixture(),
+    a = await f.register('好友甲'),
+    b = await f.register('好友乙'),
+    c = await f.register('旁观者');
+  assert.equal((await f.call('/social/request', { id: b.account.id }, a.token)).status, 200);
+  assert.equal((await f.call('/social/state', {}, a.token)).friends.length, 0);
+  assert.equal(
+    (await f.call('/social/respond', { id: a.account.id, accept: true }, c.token)).status,
+    409
+  );
+  assert.equal(
+    (await f.call('/social/respond', { id: a.account.id, accept: true }, b.token)).status,
+    200
+  );
+  assert.equal((await f.call('/social/state', {}, a.token)).friends[0].id, b.account.id);
+  assert.equal((await f.call('/social/state', {}, b.token)).friends[0].id, a.account.id);
+  assert.equal((await f.call('/social/request', { id: a.account.id }, a.token)).status, 400);
+});
+test('状态区分在线离线对局观战，普通搜索不泄漏非好友状态', async () => {
+  const f = fixture(),
+    a = await f.register('状态甲'),
+    b = await f.register('状态乙');
+  assert.equal((await f.call('/social/profile', { id: b.account.id }, a.token)).status, null);
+  assert.equal(
+    (await f.call('/social/profile', { id: b.account.id }, a.token)).relationship,
+    'none'
+  );
+  await f.call('/social/request', { id: b.account.id }, a.token);
+  await f.call('/social/respond', { id: a.account.id, accept: true }, b.token);
+  const state = () => f.call('/social/state', {}, a.token);
+  assert.equal((await state()).friends[0].status, 'online');
+  await f.call('/internal/presence', {
+    room: {
+      id: 'A2C4E6',
+      revision: 1,
+      status: 'waiting',
+      members: [{ accountId: b.account.id }],
+      spectator: null
+    }
+  });
+  assert.equal((await state()).friends[0].status, 'in_room');
+  assert.equal(
+    (await f.call('/social/invite', { id: b.account.id, room: 'B2C4E6' }, a.token)).status,
+    403
+  );
+  await f.call('/internal/presence', {
+    room: {
+      id: 'A2C4E6',
+      revision: 2,
+      status: 'playing',
+      members: [{ accountId: b.account.id }],
+      spectator: null
+    }
+  });
+  assert.equal((await state()).friends[0].status, 'playing');
+  await f.call('/internal/presence', {
+    room: {
+      id: 'A2C4E6',
+      revision: 3,
+      status: 'playing',
+      members: [],
+      spectator: { accountId: b.account.id }
+    }
+  });
+  assert.equal((await state()).friends[0].status, 'spectating');
+  await f.call('/internal/presence', {
+    room: {
+      id: 'A2C4E6',
+      revision: 1,
+      status: 'playing',
+      members: [{ accountId: b.account.id }],
+      spectator: null
+    }
+  });
+  assert.equal((await state()).friends[0].status, 'spectating');
+  await f.call('/auth/logout', {}, b.token);
+  assert.equal((await state()).friends[0].status, 'offline');
+});
+test('邀请只允许好友且不能冒领；预览不消费，成功加入后才消费', async () => {
+  const f = fixture(),
+    a = await f.register('邀请甲'),
+    b = await f.register('邀请乙');
+  assert.equal(
+    (await f.call('/social/invite', { id: b.account.id, room: 'A2C4E6' }, a.token)).status,
+    403
+  );
+  await f.call('/social/request', { id: b.account.id }, a.token);
+  await f.call('/social/respond', { id: a.account.id, accept: true }, b.token);
+  await f.call('/social/invite', { id: b.account.id, room: 'A2C4E6', roomName: '好友房' }, a.token);
+  assert.equal(
+    (await f.call('/social/invite', { id: b.account.id, room: 'A2C4E6' }, a.token)).status,
+    429
+  );
+  assert.ok(
+    (await f.call('/social/state', {}, a.token)).inviteCooldowns[b.account.id] > Date.now()
+  );
+  const now = Date.now;
+  Date.now = () => now() + 10001;
+  try {
+    assert.equal(
+      (await f.call('/social/invite', { id: b.account.id, room: 'A2C4E6' }, a.token)).status,
+      200
+    );
+  } finally {
+    Date.now = now;
+  }
+  const i = (await f.call('/social/state', {}, b.token)).invites[0];
+  assert.equal(i.fromName, a.account.name);
+  assert.equal(
+    (await f.call('/social/invitation', { id: i.id, accept: true }, a.token)).status,
+    409
+  );
+  assert.equal(
+    (await f.call('/social/invitation', { id: i.id, accept: true }, b.token)).invite.room,
+    'A2C4E6'
+  );
+  assert.equal((await f.call('/social/state', {}, b.token)).invites.length, 1);
+  await f.call('/social/invitation', { id: i.id, consume: true }, b.token);
+  assert.equal((await f.call('/social/state', {}, b.token)).invites.length, 0);
+});
+test('只有好友的进行中对局可以通过好友观战', async () => {
+  const f = fixture(),
+    a = await f.register('观战甲'),
+    b = await f.register('观战乙'),
+    c = await f.register('观战丙');
+  await f.call('/internal/presence', {
+    room: {
+      id: 'A2C4E6',
+      revision: 1,
+      status: 'playing',
+      members: [{ accountId: b.account.id }],
+      spectator: null
+    }
+  });
+  assert.equal((await f.call('/social/watch-friend', { id: b.account.id }, a.token)).status, 403);
+  await f.call('/social/request', { id: b.account.id }, a.token);
+  await f.call('/social/respond', { id: a.account.id, accept: true }, b.token);
+  assert.deepEqual(
+    (await f.call('/social/watch-friend', { id: b.account.id }, a.token)).room,
+    'A2C4E6'
+  );
+  assert.equal((await f.call('/social/watch-friend', { id: b.account.id }, c.token)).status, 403);
+  await f.call('/internal/presence', {
+    room: {
+      id: 'A2C4E6',
+      revision: 2,
+      status: 'playing',
+      members: [],
+      spectator: { accountId: b.account.id }
+    }
+  });
+  assert.equal(
+    (await f.call('/social/watch-friend', { id: b.account.id }, a.token)).room,
+    'A2C4E6'
+  );
+  await f.call('/internal/presence', {
+    room: {
+      id: 'A2C4E6',
+      revision: 3,
+      status: 'finished',
+      members: [{ accountId: b.account.id }],
+      spectator: null
+    }
+  });
+  assert.equal((await f.call('/social/watch-friend', { id: b.account.id }, a.token)).status, 409);
+});
+test('登录尝试有限流，退出的会话不可继续访问好友接口', async () => {
+  const f = fixture(),
+    a = await f.register('限流账号');
+  for (let i = 0; i < 11; i++)
+    assert.equal(
+      (await f.call('/auth/login', { name: '限流账号', password: 'bad-password' })).status,
+      401
+    );
+  assert.equal(
+    (await f.call('/auth/login', { name: '限流账号', password: 'test-password-123' })).status,
+    429
+  );
+  await f.call('/auth/logout', {}, a.token);
+  assert.equal((await f.call('/social/state', {}, a.token)).status, 401);
+});
+test('不同房间码共用账号的加入频率限制', async () => {
+  const f = fixture(),
+    a = await f.register('加入限流甲'),
+    b = await f.register('加入限流乙');
+  for (let i = 0; i < 40; i++)
+    assert.equal(
+      (await f.call('/internal/room-access', { id: a.account.id, room: 'ROOM' + i })).status,
+      200
+    );
+  assert.equal(
+    (await f.call('/internal/room-access', { id: a.account.id, room: 'OTHER' })).status,
+    429
+  );
+  assert.equal(
+    (await f.call('/internal/room-access', { id: b.account.id, room: 'OTHER' })).status,
+    200
+  );
+});
+test('日志分片完整保留中文大提示词，后台接口拒绝普通用户和跨域', async () => {
+  const store = new Storage(),
+    data = {
+      kind: 'deepseek',
+      matchId: crypto.randomUUID(),
+      request: { messages: [{ role: 'system', content: '三体规则🚀'.repeat(20000) }] },
+      response: {
+        choices: [{ message: { content: '{"choice":2}', reasoning_content: '模型思考' } }]
+      }
+    };
+  const parts = logParts('audit:test', data);
+  assert.ok(Object.keys(parts).length > 3);
+  await store.put(parts);
+  assert.deepEqual(await readLog(store, 'audit:test', parts['audit:test']), data);
+  for (const value of Object.values(parts))
+    assert.ok(new TextEncoder().encode(JSON.stringify(value)).byteLength < 128000);
+  assert.equal(
+    (
+      await worker.fetch(new Request('https://game.test/api/admin/logs'), {
+        ADMIN_LOG_TOKEN: 'secret'
+      })
+    ).status,
+    403
+  );
+  assert.equal(
+    (
+      await worker.fetch(
+        new Request('https://game.test/api/auth/login', {
+          method: 'POST',
+          headers: { Origin: 'https://attacker.test' },
+          body: '{}'
+        }),
+        {}
+      )
+    ).status,
+    403
+  );
+});
+test('DeepSeek 决策正常执行，但不再生成请求和响应审计日志', async () => {
+  const game = new Game({ count: 3 }),
+    entries = [];
+  let sent;
+  const action = await decideDeepSeek(
+    game,
+    0,
+    [],
+    'private-secret',
+    async (url, options) => {
+      sent = JSON.parse(options.body);
+      return Response.json({
+        choices: [
+          {
+            message: { content: '{"choice":0}', reasoning_content: '思考过程' },
+            finish_reason: 'stop'
+          }
+        ],
+        usage: { total_tokens: 42 }
+      });
+    },
+    null,
+    null,
+    (entry) => entries.push(entry)
+  );
+  assert.ok(action);
+  assert.ok(sent.messages.length);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].status, 'success');
+  assert.equal(entries[0].usage.totalTokens, 42);
+  assert.equal(entries[0].usage.promptTokens, null);
+  const encoded = JSON.stringify(entries);
+  assert.equal(encoded.includes('思考过程'), false);
+  assert.equal(encoded.includes('private-secret'), false);
+  assert.equal(encoded.includes('messages'), false);
+});
+test('DeepSeek HTTP 失败时回退，不再保存错误响应日志', async () => {
+  const entries = [],
+    action = await decideDeepSeek(
+      new Game({ count: 3 }),
+      0,
+      [],
+      'key',
+      async () => new Response('quota exceeded', { status: 429 }),
+      null,
+      null,
+      (e) => entries.push(e)
+    );
+  assert.equal(action, null);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].status, 'http_error');
+  assert.equal(entries[0].httpStatus, 429);
+  assert.equal(JSON.stringify(entries).includes('quota exceeded'), false);
+});
+test('房间只保存单键统计记录，管理员日志接口可读取且普通用户不可访问', async () => {
+  const storage = new Storage(),
+    jobs = [],
+    ctx = {
+      storage,
+      blockConcurrencyWhile: (fn) => {
+        const job = fn();
+        jobs.push(job);
+        return job;
+      },
+      waitUntil: (job) => jobs.push(job)
+    };
+  const room = new GameRoom(ctx, { DEEPSEEK_API_KEY: 'secret' });
+  await jobs[0];
+  room.room = {
+    ...newRoom('A2C4E6', 'bot', '测试', 'bot'),
+    status: 'playing',
+    matchId: crypto.randomUUID(),
+    game: new Game({ count: 3, demo: false }),
+    members: [
+      { id: 'bot', name: 'bot', bot: 'deepseek' },
+      { id: 'a', name: 'a' },
+      { id: 'b', name: 'b' }
+    ]
+  };
+  room.commit = async () => {};
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    Response.json({
+      choices: [{ message: { content: '{"choice":0}' } }],
+      usage: { prompt_tokens: 123 }
+    });
+  try {
+    await room.alarm();
+    await Promise.all(jobs);
+  } finally {
+    globalThis.fetch = original;
+  }
+  const logs = [...storage.map].filter(([key]) => key.startsWith('audit:'));
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0][0].includes(':part:'), false);
+  assert.equal(logs[0][1].applied, true);
+  assert.equal(logs[0][1].usage.promptTokens, 123);
+  const response = await room.fetch(new Request('https://internal/internal/logs?kind=deepseek'));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).entries.length, 1);
+  assert.equal(
+    (
+      await worker.fetch(new Request('https://game.test/api/admin/logs/A2C4E6?kind=deepseek'), {
+        ADMIN_LOG_TOKEN: 'secret'
+      })
+    ).status,
+    403
+  );
+});
+test('DeepSeek 指标按对局保留最近十局，不删除对局日志及回放', async () => {
+  const storage = new Storage(),
+    jobs = [],
+    ctx = {
+      storage,
+      blockConcurrencyWhile: (fn) => {
+        const job = fn();
+        jobs.push(job);
+        return job;
+      }
+    };
+  const room = new GameRoom(ctx, {});
+  await jobs[0];
+  const matches = Array.from({ length: 11 }, () => crypto.randomUUID());
+  for (let i = 0; i < matches.length; i++) {
+    const id = matches[i],
+      record = { schemaVersion: 1, kind: 'deepseek', matchId: id, at: i + 1 };
+    await storage.put(`audit:${id}:game:0001`, { parts: 1 });
+    await room.recordDeepseekMetric(`audit:${id}:deepseek:0001:metric`, record);
+  }
+  assert.equal(await storage.get(`audit:${matches[0]}:deepseek:0001:metric`), undefined);
   assert.ok(await storage.get(`audit:${matches[0]}:game:0001`));
-  for(const id of matches.slice(1))assert.ok(await storage.get(`audit:${id}:deepseek:0001:metric`));
-  assert.equal((await storage.get('deepseek-metric-retention')).length,10);
+  for (const id of matches.slice(1))
+    assert.ok(await storage.get(`audit:${id}:deepseek:0001:metric`));
+  assert.equal((await storage.get('deepseek-metric-retention')).length, 10);
 });
-test('大对话分片保存房间，休眠恢复完整且清理旧状态分片',async()=>{
-  const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const p=fn();jobs.push(p);return p;}};
-  const room=new GameRoom(ctx,{});await jobs.at(-1);room.room=newRoom('A2C4E6','host','测试','房主');room.room.deepseekSessions={bot:{messages:[{role:'system',content:'大提示词🚀'.repeat(40000)}]}};
-  await room.persistRoom();const first=await storage.get('room');assert.ok(first.chunked);assert.ok(first.parts>10);
-  const restored=new GameRoom(ctx,{});await jobs.at(-1);assert.deepEqual(restored.room.deepseekSessions,room.room.deepseekSessions);
-  restored.room.revision++;await restored.persistRoom();assert.equal(await storage.get(first.key),undefined);assert.ok((await storage.get('room')).chunked);
+test('大对话分片保存房间，休眠恢复完整且清理旧状态分片', async () => {
+  const storage = new Storage(),
+    jobs = [],
+    ctx = {
+      storage,
+      blockConcurrencyWhile: (fn) => {
+        const p = fn();
+        jobs.push(p);
+        return p;
+      }
+    };
+  const room = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  room.room = newRoom('A2C4E6', 'host', '测试', '房主');
+  room.room.deepseekSessions = {
+    bot: { messages: [{ role: 'system', content: '大提示词🚀'.repeat(40000) }] }
+  };
+  await room.persistRoom();
+  const first = await storage.get('room');
+  assert.ok(first.chunked);
+  assert.ok(first.parts > 10);
+  const restored = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  assert.deepEqual(restored.room.deepseekSessions, room.room.deepseekSessions);
+  restored.room.revision++;
+  await restored.persistRoom();
+  assert.equal(await storage.get(first.key), undefined);
+  assert.ok((await storage.get('room')).chunked);
 });
-test('旧匿名座位只允许原 cookie 继承，不能冒领已绑定账号的座位',async()=>{
-  const jobs=[],ctx={storage:new Storage(),blockConcurrencyWhile:fn=>{const p=fn();jobs.push(p);return p;}};
-  const r=new GameRoom(ctx,{});await jobs.at(-1);r.room=newRoom('12345678','original-cookie','旧房间','旧名称');r.commit=async()=>{};
-  const claim=(session,id='A2C4E6G8')=>r.fetch(new Request('https://internal/internal/claim-legacy',{method:'POST',body:JSON.stringify({session,account:{id,name:'账号名称'}})}));
-  assert.equal((await claim('someone-else')).status,403);
-  assert.equal((await claim('original-cookie')).status,200);assert.equal(r.room.host,'account:A2C4E6G8');assert.equal(r.room.members[0].accountId,'A2C4E6G8');
-  assert.equal((await claim('original-cookie','B2D4F6H8')).status,403);assert.equal(r.room.members[0].accountId,'A2C4E6G8');
+test('旧匿名座位只允许原 cookie 继承，不能冒领已绑定账号的座位', async () => {
+  const jobs = [],
+    ctx = {
+      storage: new Storage(),
+      blockConcurrencyWhile: (fn) => {
+        const p = fn();
+        jobs.push(p);
+        return p;
+      }
+    };
+  const r = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  r.room = newRoom('12345678', 'original-cookie', '旧房间', '旧名称');
+  r.commit = async () => {};
+  const claim = (session, id = 'A2C4E6G8') =>
+    r.fetch(
+      new Request('https://internal/internal/claim-legacy', {
+        method: 'POST',
+        body: JSON.stringify({ session, account: { id, name: '账号名称' } })
+      })
+    );
+  assert.equal((await claim('someone-else')).status, 403);
+  assert.equal((await claim('original-cookie')).status, 200);
+  assert.equal(r.room.host, 'account:A2C4E6G8');
+  assert.equal(r.room.members[0].accountId, 'A2C4E6G8');
+  assert.equal((await claim('original-cookie', 'B2D4F6H8')).status, 403);
+  assert.equal(r.room.members[0].accountId, 'A2C4E6G8');
 });

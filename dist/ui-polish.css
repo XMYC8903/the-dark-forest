@@ -50,7 +50,7 @@
 .portal-layout.wide .portal-scene h1 {
   max-width: 13ch;
   font-size: clamp(28px, 3.2vw, 46px);
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   line-height: 1.34;
 }
 
@@ -67,7 +67,7 @@
 
 .portal-panel h2 {
   line-height: 1.4;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
 }
 
 .portal-panel p {

@@ -23,6 +23,8 @@ pnpm dev
 
 访问终端显示的地址。`pnpm demo` 只运行静态同设备演示，不提供在线账号和房间。运行 `pnpm check:generated`、`pnpm lint`、`pnpm typecheck` 和 `pnpm test` 执行检查。ESLint 目前覆盖源码的基础错误规则；类型检查目前覆盖 AI 计时模块。`pnpm check:worker` 和 `pnpm check:social` 是需要本地 Worker 服务的检查脚本。
 
+代码使用 Prettier 统一排版：运行 `pnpm format` 格式化源码并更新生成的 `dist/game.js`，运行 `pnpm format:check` 检查格式和生成文件是否一致。页面中的模板字符串保持原样，避免格式化改变界面文本或空白。
+
 ## 配置和部署
 
 Worker 配置位于 `wrangler.jsonc`，入口是 `server/worker.js`，共享规则源码位于 `shared/game.js`；`pnpm build` 将其复制到 `dist/game.js` 供浏览器使用，其他静态资源位于 `dist/`。修改共享规则后运行 `pnpm build`，并一同提交生成的浏览器文件。在线账号需要配置 `AUTH_PEPPER`，DeepSeek 需要 `DEEPSEEK_API_KEY`，后台日志接口需要 `ADMIN_LOG_TOKEN`。密钥应通过 Worker Secret 配置；本地开发可使用不纳入版本控制的 `.dev.vars`。

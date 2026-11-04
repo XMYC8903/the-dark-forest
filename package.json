@@ -14,11 +14,14 @@
     "test": "node --test test/*.test.mjs",
     "build": "node scripts/build.mjs",
     "check:generated": "node scripts/build.mjs --check",
+    "format": "prettier --write server shared dist scripts test serve.mjs eslint.config.js && node scripts/build.mjs",
+    "format:check": "prettier --check server shared dist scripts test serve.mjs eslint.config.js && node scripts/build.mjs --check",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "eslint": "^10.13.0",
+    "prettier": "3.6.2",
     "typescript": "^5.9.3",
     "wrangler": "^4.152.0",
     "ws": "^8.21.0"
