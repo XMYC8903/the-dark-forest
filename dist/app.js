@@ -1331,7 +1331,7 @@ function showHumanTimerFeedback() {
   feedback.className = 'energy-delta human-timer-delta';
   feedback.textContent = '+30s';
   feedback.style.left = `${rect.left + rect.width / 2}px`;
-  feedback.style.top = `${rect.bottom - 4}px`;
+  feedback.style.top = `${rect.top - 12}px`;
   layer.append(feedback);
   feedback.addEventListener('animationend', () => feedback.remove(), { once: true });
   setTimeout(() => feedback.remove(), 4300);
