@@ -27,7 +27,10 @@ import {
 import { AI_NAMES } from './ai-labels.js';
 import { requestId } from './request-id.js';
 import { CARDS, GALAXIES, EDGES } from './game.js';
-import { summarizeBuildings } from './view-model.js?v=20261025-green-loss-mark';
+import {
+  summarizeBuildings,
+  observerHandColor
+} from './view-model.js?v=20261104-observer-card-color1';
 import { createSpectatorPlayback } from './spectator-motion.js?v=20261101-production-fix1';
 import { createSocial } from './social.js?v=20261026-account-layout3';
 
@@ -906,7 +909,7 @@ function observerPlayerHTML(p, game, strikesFor) {
   const hand = p.hand
     .map(
       (c) =>
-        `<span class="observer-hand-card ${esc(c.type)}" data-observer-card="${esc(c.id)}" style="--hand-card-color:${c.color || { build: '#75b2f7', broadcast: '#e7837f', strike: '#9cce8c' }[c.type] || '#9eafb5'}" title="${name} · ${esc(c.name)} · ◇ ${c.cost}${c.face ? ' · ' + esc(c.face) : ''}"><b>${esc(c.name)}</b><small>◇ ${c.cost}${c.face ? ' · ' + esc(c.face) : ''}${c.level !== undefined ? ' · 等级 ' + (c.level === Infinity ? '∞' : esc(c.level)) : c.type !== 'broadcast' && c.range !== undefined ? ' · 距离 ' + (c.range === Infinity ? '∞' : esc(c.range)) : ''}</small></span>`
+        `<span class="observer-hand-card ${esc(c.type)}" data-observer-card="${esc(c.id)}" style="--hand-card-color:${observerHandColor(c)}" title="${name} · ${esc(c.name)} · ◇ ${c.cost}${c.face ? ' · ' + esc(c.face) : ''}"><b>${esc(c.name)}</b><small>◇ ${c.cost}${c.face ? ' · ' + esc(c.face) : ''}${c.level !== undefined ? ' · 等级 ' + (c.level === Infinity ? '∞' : esc(c.level)) : c.type !== 'broadcast' && c.range !== undefined ? ' · 距离 ' + (c.range === Infinity ? '∞' : esc(c.range)) : ''}</small></span>`
     )
     .join('');
   return `<article class="player observer-player${p.alive ? '' : ' eliminated'}${p.id === game.active && !game.over ? ' current-turn' : ''}" style="--observer-color:${color}" data-observer-player="${p.id}"><span class="player-top"><span class="avatar">${esc(p.name[0])}</span><span class="player-name" title="${name}">${name}<small class="player-sub" title="${location}">${p.alive ? '存续文明' : '文明已消逝'} · ${location}</small></span><span class="player-counters"><span class="player-energy" aria-label="能量 ${p.energy}"><span class="energy-diamond">◇</span><span class="energy-number">${p.energy}</span></span><span class="public-hand-count" aria-label="手牌 ${p.hand.length} 张"><i class="hand-card-symbol" aria-hidden="true"></i>${p.hand.length}</span></span></span>${observerBuildingHTML(p, game)}<span class="player-strikes">${strikes}</span><span class="observer-hand-row" data-observer-hand="${p.id}" aria-label="${name}的全部手牌">${hand || '<small>没有手牌</small>'}</span></article>`;

@@ -2,10 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   summarizeBuildings,
+  observerHandColor,
   broadcastPresentation,
   strikeFeedback,
   strikeNotice
 } from '../dist/view-model.js';
+import { Game, CARDS, COLORS } from '../shared/game.js';
+import { spectatorGameView } from '../server/room-core.js';
+import { sanitizeReplayArchive } from '../dist/replay-archive.js';
+
+test('观战和回放里的光速飞船保留紫色，其他牌继续使用原有颜色', () => {
+  const game = new Game({ count: 3, demo: false, seed: 73 });
+  game.players[0].hand[0] = { id: 'ship-test', key: 'lightship' };
+  const view = spectatorGameView(game);
+  const liveCard = view.players[0].hand[0];
+  assert.equal(liveCard.key, undefined);
+  assert.equal(observerHandColor(liveCard), CARDS.lightship.color);
+  const replay = sanitizeReplayArchive({
+    format: 'dark-forest-replay',
+    version: 1,
+    events: [],
+    frames: [{ eventCount: 0, game: view }]
+  });
+  assert.equal(observerHandColor(replay.frames[0].game.players[0].hand[0]), CARDS.lightship.color);
+  assert.equal(observerHandColor({ name: CARDS.solar.name, type: 'build' }), COLORS.build);
+  assert.equal(observerHandColor({ name: '未知', type: 'strike' }), COLORS.strike);
+});
 
 const cards = (...keys) => keys.map((key, i) => ({ id: `b${i}`, key }));
 test('绿色幸存叉只在目标存活且实际损失建筑时显示', () => {

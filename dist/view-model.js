@@ -1,4 +1,13 @@
-import { CARDS, GALAXIES } from './game.js';
+import { CARDS, COLORS, GALAXIES } from './game.js';
+
+// Live spectator cards contain names and types; older replay cards may also
+// contain keys. Resolve both against the same authoritative card colors.
+export function observerHandColor(card) {
+  const definition = Object.hasOwn(CARDS, card.key)
+    ? CARDS[card.key]
+    : Object.values(CARDS).find((entry) => entry.name === card.name && entry.type === card.type);
+  return definition?.color || card.color || COLORS[card.type] || '#9eafb5';
+}
 
 // Group physical buildings only for display; their cards remain in the engine.
 export function summarizeBuildings(builds, { starActive = true } = {}) {
