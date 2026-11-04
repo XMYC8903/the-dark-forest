@@ -1300,7 +1300,8 @@ export function launchOnline(room, transport) {
 const humanTimerElement = document.createElement('div');
 humanTimerElement.className = 'human-action-timer';
 humanTimerElement.hidden = true;
-humanTimerElement.innerHTML = '<span></span><button type="button">加时 30 秒</button>';
+humanTimerElement.innerHTML =
+  '<span class="human-action-timer-reading"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.2v4.1l2.6 1.5"></path></svg><span class="human-action-timer-seconds"></span></span><button type="button">加时 30 秒</button>';
 document.body.append(humanTimerElement);
 let extendingHumanTimer = false;
 let humanTimerClockOffset = 0;
@@ -1313,10 +1314,7 @@ function updateHumanTimer() {
     0,
     Math.ceil((timer.deadline - Date.now() - humanTimerClockOffset) / 1000)
   );
-  const label =
-    { turn: '行动', respond: '广播回应', settle: '广播结算', escape: '逃生选择' }[timer.phase] ||
-    '操作';
-  humanTimerElement.querySelector('span').textContent = `${label} ${remaining} 秒`;
+  humanTimerElement.querySelector('.human-action-timer-seconds').textContent = `${remaining}s`;
   const button = humanTimerElement.querySelector('button');
   button.disabled = Boolean(timer.extended || extendingHumanTimer || !remaining);
   button.textContent = timer.extended ? '已加时' : '加时 30 秒';

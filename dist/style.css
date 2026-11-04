@@ -2752,13 +2752,29 @@ main {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   color: #91a0b2;
-  font-size: 11px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
   white-space: nowrap;
 }
 .human-action-timer[hidden] {
   display: none;
+}
+.human-action-timer-reading {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.human-action-timer-reading svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
 }
 .human-action-timer button {
   padding: 8px 0;
@@ -2775,7 +2791,12 @@ main {
 }
 @media (max-width: 700px) and (orientation: portrait) {
   .human-action-timer {
-    gap: 6px;
-    font-size: 8px;
+    gap: 10px;
+    font-size: 12px;
+  }
+}
+@media (min-width: 1001px) {
+  .human-action-timer {
+    font-size: clamp(12px, 0.68vw, 15px);
   }
 }
