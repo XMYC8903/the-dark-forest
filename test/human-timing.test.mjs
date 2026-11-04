@@ -131,6 +131,8 @@ test('回合超时由服务器结束行动并补牌，脱离客户端也生效',
   assert.equal(audit.action.type, 'end');
   assert.equal(game.players[0].hand.length, 4);
   assert.equal(game.active, 1);
+  assert.equal(roomView(instance.room, 'a').humanTimeout.phase, 'turn');
+  assert.equal(roomView(instance.room, 'b').humanTimeout, undefined);
 });
 
 test('被点名的广播超时自动打出合法回应牌并完成结算', async () => {

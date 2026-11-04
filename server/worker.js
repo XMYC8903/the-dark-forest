@@ -1018,6 +1018,14 @@ export class GameRoom {
           requireThat(action, '超时操作无效');
           applyGameAction(this.room, seat, action);
           delete this.room.humanTimers[seat];
+          this.room.humanTimeouts ||= {};
+          this.room.humanTimeouts[seat] = {
+            id: expired[1].id,
+            phase: expired[1].phase,
+            responded: Boolean(action.cardId),
+            memberId: this.room.members[seat].id,
+            matchId: this.room.matchId
+          };
           this.room.revision++;
           this.room.updatedAt = Date.now();
           await this.commit({ operation: 'human-timeout', actor: seat, action });

@@ -1542,6 +1542,7 @@ export async function receiveOnlineRoom(room) {
     if (!onlineQueued || onlineQueued.revision < room.revision) onlineQueued = room;
     return;
   }
+  const timeout = room.humanTimeout?.id !== onlineRoom.humanTimeout?.id ? room.humanTimeout : null;
   const previous = game,
     origins = onlineOrigins(),
     epoch = onlineEpoch;
@@ -1549,6 +1550,19 @@ export async function receiveOnlineRoom(room) {
   try {
     applyOnlineRoom(room);
     await animateOnlineChange(previous, origins);
+    if (timeout) {
+      const message =
+        timeout.phase === 'turn'
+          ? '时间已耗尽，已结束行动并补牌'
+          : timeout.phase === 'respond'
+            ? timeout.responded
+              ? '回应时间已耗尽，已自动打出回应牌'
+              : '回应时间已耗尽，已自动不回应'
+            : timeout.phase === 'settle'
+              ? '选择时间已耗尽，已自动选择回应者'
+              : '逃生时间已耗尽，已自动放弃逃生';
+      toast(message);
+    }
   } finally {
     if (epoch === onlineEpoch) {
       setBusy(false);

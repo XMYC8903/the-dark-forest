@@ -23,7 +23,7 @@ import {
   launchOnline,
   receiveOnlineRoom,
   suspendTable
-} from './app.js?v=20261104-human-timer8';
+} from './app.js?v=20261104-human-timer9';
 import { AI_NAMES } from './ai-labels.js';
 import { requestId } from './request-id.js';
 import { CARDS, GALAXIES, EDGES } from './game.js';
@@ -106,6 +106,7 @@ function observerSaveToast(message) {
   if (!node) return;
   clearTimeout(observerSaveToastTimer);
   node.textContent = message;
+  node.classList.remove('strike-hit');
   node.classList.add('visible');
   observerSaveToastTimer = setTimeout(() => node.classList.remove('visible'), 3800);
 }
@@ -646,6 +647,7 @@ function renderRoom() {
           task(async () => {
             room = await mutate('bot', { level: button.dataset.level });
             renderRoom();
+            observerSaveToast('AI 玩家已加入房间');
           }))
     );
   $('#room-page')

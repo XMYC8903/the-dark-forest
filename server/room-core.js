@@ -131,6 +131,17 @@ export function roomView(room, sessionId) {
     serverTime: Date.now(),
     spectatorOccupied: spectators.length > 0,
     ...(!isSpectator && room.humanTimers?.[me] ? { humanTimer: { ...room.humanTimers[me] } } : {}),
+    ...(!isSpectator &&
+    room.humanTimeouts?.[me]?.memberId === sessionId &&
+    room.humanTimeouts[me].matchId === room.matchId
+      ? {
+          humanTimeout: {
+            id: room.humanTimeouts[me].id,
+            phase: room.humanTimeouts[me].phase,
+            responded: room.humanTimeouts[me].responded
+          }
+        }
+      : {}),
     members: room.members.map((p, index) => ({
       index,
       name: p.name,
