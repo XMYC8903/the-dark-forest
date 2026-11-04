@@ -157,7 +157,7 @@ export async function decideDeepSeek(
       model: 'deepseek-flash',
       thinking: 'enabled',
       reasoningEffort: 'high',
-      maxTokens: 4096,
+      maxTokens: 8192,
       apiCalled: false,
       status: 'missing_key',
       phase:
@@ -265,7 +265,7 @@ export async function decideDeepSeek(
     model: 'deepseek-flash',
     thinking: { type: 'enabled' },
     reasoning_effort: 'high',
-    max_tokens: 4096,
+    max_tokens: 8192,
     response_format: { type: 'json_object' },
     messages: [...messages, decisionMessage]
   };

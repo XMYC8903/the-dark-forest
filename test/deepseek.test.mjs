@@ -143,7 +143,7 @@ test('DeepSeek 使用 Flash 深入思考并只收到玩家可见局面与合法�
   assert.equal(requestBody.model, 'deepseek-flash');
   assert.deepEqual(requestBody.thinking, { type: 'enabled' });
   assert.equal(requestBody.reasoning_effort, 'high');
-  assert.equal(requestBody.max_tokens, 4096);
+  assert.equal(requestBody.max_tokens, 8192);
   assert.deepEqual(requestBody.response_format, { type: 'json_object' });
   const prompt = JSON.parse(requestBody.messages.at(-1).content.split('当前局面：')[1]);
   assert.ok(requestBody.messages[0].content.startsWith('完整规则和星图'));
