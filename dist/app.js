@@ -1395,6 +1395,18 @@ function renderOnlineChrome() {
 }
 function applyOnlineRoom(room) {
   const oldTimer = onlineRoom?.humanTimer;
+  const previousGame = onlineRoom?.game;
+  if (
+    previousGame &&
+    (previousGame.turnIndex !== room.game.turnIndex || previousGame.active !== room.game.active)
+  ) {
+    dragControls?.cancel();
+    discardMode = false;
+    selected.clear();
+    targetCard = null;
+    targetCardSize = null;
+    $('#target-bar').hidden = true;
+  }
   if (oldTimer && oldTimer.id !== room.humanTimer?.id && ($('#turn-ready') || $('#escape-yes')))
     hideDialog();
   onlineRoom = room;

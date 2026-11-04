@@ -1093,6 +1093,48 @@ main {
   }
 }
 
+/* Hand cards and their drag copies share the same face. */
+#hand .game-card,
+.drag-card {
+  padding: 10px;
+}
+#hand .card-top,
+.drag-card .card-top {
+  font-size: 8px;
+  letter-spacing: 0.5px;
+}
+#hand .card-cost,
+.drag-card .card-cost {
+  font-size: 15px;
+}
+#hand .card-art,
+.drag-card .card-art {
+  height: clamp(40px, 8vh, 79px);
+  margin: 7px 0 0;
+}
+#hand .card-name,
+.drag-card .card-name {
+  font-size: clamp(12px, 1.2vw, 15px);
+  line-height: 1.4;
+  letter-spacing: 1.2px;
+}
+#hand .card-face,
+.drag-card .card-face {
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+#hand .card-rule,
+.drag-card .card-rule {
+  margin-top: 10px;
+  padding-top: 8px;
+  font-size: 8px;
+  line-height: 1.7;
+}
+#hand .hand-card-detail,
+.drag-card .hand-card-detail {
+  display: none;
+}
+
 /* A brief arrival sequence gives players a visual cue before the board settles. */
 .table-entry {
   position: fixed;
