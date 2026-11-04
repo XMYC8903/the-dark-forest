@@ -2744,3 +2744,36 @@ main {
     scroll-behavior: auto !important;
   }
 }
+.human-action-timer {
+  position: fixed;
+  z-index: 110;
+  top: max(8px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid #607680;
+  border-radius: 9px;
+  background: #152531f5;
+  color: #d9e5df;
+  font-size: 13px;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px #0008;
+}
+.human-action-timer[hidden] {
+  display: none;
+}
+.human-action-timer button {
+  border: 1px solid #85966d;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: #344434;
+  color: #e1edcd;
+  cursor: pointer;
+}
+.human-action-timer button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

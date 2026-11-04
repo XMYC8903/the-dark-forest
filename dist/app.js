@@ -1297,6 +1297,53 @@ export function launchOnline(room, transport) {
   applyOnlineRoom(room);
   maybeOnlinePrompt();
 }
+const humanTimerElement = document.createElement('div');
+humanTimerElement.className = 'human-action-timer';
+humanTimerElement.hidden = true;
+humanTimerElement.innerHTML = '<span></span><button type="button">加时 30 秒</button>';
+document.body.append(humanTimerElement);
+let extendingHumanTimer = false;
+let humanTimerClockOffset = 0;
+function updateHumanTimer() {
+  const timer = onlineRoom?.humanTimer;
+  const show = Boolean(online && !$('.app').hidden && timer && !game?.over);
+  humanTimerElement.hidden = !show;
+  if (!show) return;
+  const remaining = Math.max(
+    0,
+    Math.ceil((timer.deadline - Date.now() - humanTimerClockOffset) / 1000)
+  );
+  const label =
+    { turn: '行动', respond: '广播回应', settle: '广播结算', escape: '逃生选择' }[timer.phase] ||
+    '操作';
+  humanTimerElement.querySelector('span').textContent = `${label} ${remaining} 秒`;
+  const button = humanTimerElement.querySelector('button');
+  button.disabled = Boolean(timer.extended || extendingHumanTimer || !remaining);
+  button.textContent = timer.extended ? '已加时' : '加时 30 秒';
+}
+humanTimerElement.querySelector('button').onclick = async () => {
+  const timer = onlineRoom?.humanTimer,
+    bridge = online;
+  if (
+    !timer ||
+    timer.extended ||
+    extendingHumanTimer ||
+    timer.deadline <= Date.now() + humanTimerClockOffset
+  )
+    return;
+  extendingHumanTimer = true;
+  updateHumanTimer();
+  try {
+    await receiveOnlineRoom(await bridge.extendTime(timer.id));
+  } catch (error) {
+    toast(error.message);
+    bridge.reconnect();
+  } finally {
+    extendingHumanTimer = false;
+    updateHumanTimer();
+  }
+};
+window.setInterval(updateHumanTimer, 250);
 function renderOnlineChrome() {
   $('.self-ident').onclick = () => online.openProfile(onlineRoom.members[viewer]);
   $('.self-ident').style.cursor = 'pointer';
@@ -1331,10 +1378,17 @@ function renderOnlineChrome() {
     $('#action-hint').innerHTML = '你的文明已消逝。<br>可以继续观战，已发打击仍在飞行。';
 }
 function applyOnlineRoom(room) {
+  const oldTimer = onlineRoom?.humanTimer;
+  if (oldTimer && oldTimer.id !== room.humanTimer?.id && ($('#turn-ready') || $('#escape-yes')))
+    hideDialog();
   onlineRoom = room;
+  humanTimerClockOffset = Number.isFinite(room.serverTime)
+    ? room.serverTime - (room._clientReceivedAt ?? Date.now())
+    : 0;
   game = hydrateOnline(room.game);
   viewer = room.me;
   privacy = false;
+  updateHumanTimer();
   const b = game.pending;
   broadcastStep =
     b?.kind === 'broadcast'
@@ -1447,6 +1501,7 @@ async function animateOnlineChange(
   await Promise.all(flights);
 }
 export async function receiveOnlineRoom(room) {
+  room._clientReceivedAt ??= Date.now();
   if (
     !online ||
     $('.app').hidden ||

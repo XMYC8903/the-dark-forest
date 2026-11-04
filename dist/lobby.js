@@ -23,7 +23,7 @@ import {
   launchOnline,
   receiveOnlineRoom,
   suspendTable
-} from './app.js?v=20261028-no-deepseek-dialog1';
+} from './app.js?v=20261104-human-timer1';
 import { AI_NAMES } from './ai-labels.js';
 import { requestId } from './request-id.js';
 import { CARDS, GALAXIES, EDGES } from './game.js';
@@ -696,6 +696,12 @@ const transport = {
   connected: () => connected,
   async send(action, revision) {
     const value = await mutate('action', { action, revision });
+    room = value;
+    roomRevision = Math.max(roomRevision, value.revision);
+    return value;
+  },
+  async extendTime(timerId) {
+    const value = await mutate('extend-time', { timerId });
     room = value;
     roomRevision = Math.max(roomRevision, value.revision);
     return value;

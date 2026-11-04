@@ -18,6 +18,7 @@ import {
 import { decideAI } from './ai.js';
 import { decideDeepSeek } from './deepseek.js';
 import { nextAIActionAt } from './ai-timing.js';
+import { syncHumanTimers, humanTimeoutAction } from './human-timing.js';
 import { AccountHub, accountPrincipal, randomCode } from './accounts.js';
 import { logParts, readLog, putRecords } from './private-logs.js';
 import { packSession, readSession, dropSession } from './session-store.js';
@@ -254,7 +255,7 @@ export default {
         return joined;
       }
       const match = url.pathname.match(
-        /^\/api\/rooms\/([A-Za-z0-9]{6}|[a-f0-9]{8})(?:\/(join|leave|watch|bot|remove|start|rematch|action|rename|recording|ws))?$/
+        /^\/api\/rooms\/([A-Za-z0-9]{6}|[a-f0-9]{8})(?:\/(join|leave|watch|bot|remove|start|rematch|action|extend-time|rename|recording|ws))?$/
       );
       if (match) {
         headers.set('x-operation', match[2] || 'state');
@@ -365,6 +366,14 @@ export class GameRoom {
           this.sessionTexts[id] = JSON.stringify(session);
         }
         delete this.room.deepseekSessionRefs;
+      }
+      if (this.room?.status === 'playing' && !this.room.humanTimers) {
+        const humanAt = syncHumanTimers(this.room);
+        await this.persistRoom();
+        if (Number.isFinite(humanAt)) {
+          const current = await ctx.storage.getAlarm();
+          if (!current || humanAt < current) await ctx.storage.setAlarm(humanAt);
+        }
       }
       // Persist schema upgrades before hibernation, so broadcast batch IDs stay stable on reconnect.
       if (
@@ -533,7 +542,10 @@ export class GameRoom {
             return json({ left: true });
           }
         }
-        const backup = serialized(this.room);
+        const backup =
+          operation === 'extend-time'
+            ? structuredClone(serialized(this.room))
+            : serialized(this.room);
         try {
           if (operation === 'watch-friend') {
             requireThat(this.room.status === 'playing', '好友的对局已结束', 409);
@@ -555,7 +567,37 @@ export class GameRoom {
               '房间服务器尚未配置 DeepSeek API Key。请管理员先设置 DEEPSEEK_API_KEY。',
               503
             );
-          mutateRoom(this.room, session, operation === 'watch-friend' ? 'watch' : operation, body);
+          if (operation === 'extend-time') {
+            const seat = this.room.members.findIndex(
+              (member) => member.id === session && !member.exited && !member.bot
+            );
+            const timer = this.room.humanTimers?.[seat];
+            requireThat(
+              seat >= 0 && timer && timer.id === body.timerId,
+              '当前没有可加时的操作',
+              409
+            );
+            requireThat(now < timer.deadline, '操作时间已结束', 409);
+            requireThat(!timer.extended, '本次操作已经加时', 409);
+            timer.deadline += 30000;
+            timer.extended = true;
+            this.room.revision++;
+            this.room.updatedAt = now;
+          } else {
+            const seat = this.room.members.findIndex((member) => member.id === session);
+            if (operation === 'action') {
+              syncHumanTimers(this.room, now);
+              const timer = this.room.humanTimers?.[seat];
+              if (timer) requireThat(now < timer.deadline, '操作时间已结束', 409);
+            }
+            mutateRoom(
+              this.room,
+              session,
+              operation === 'watch-friend' ? 'watch' : operation,
+              body
+            );
+            if (operation === 'action' && this.room.humanTimers) delete this.room.humanTimers[seat];
+          }
           if (body.requestId)
             this.room.receipts.push({ id: String(body.requestId).slice(0, 80), session });
           this.room.receipts = this.room.receipts.slice(-100);
@@ -706,6 +748,7 @@ export class GameRoom {
             .filter(Boolean)
         ])
       ];
+    const humanAt = syncHumanTimers(this.room);
     appendDeepSeekUpdates(this.room);
     const botAt = nextAIActionAt(this.room, this.nextBot());
     const writes = {};
@@ -797,7 +840,7 @@ export class GameRoom {
       this.room.status === 'playing' && this.room.aiThinking
         ? this.room.aiThinking.startedAt + DEEPSEEK_THINKING_TIMEOUT_MS
         : Infinity;
-    const alarmAt = Math.min(botAt, autoSettleAt || Infinity, thinkingTimeout);
+    const alarmAt = Math.min(botAt, autoSettleAt || Infinity, thinkingTimeout, humanAt);
     if (Number.isFinite(alarmAt)) await this.ctx.storage.setAlarm(alarmAt);
     else await this.ctx.storage.deleteAlarm();
   }
@@ -963,6 +1006,28 @@ export class GameRoom {
         await this.ctx.storage.deleteAlarm();
         return;
       }
+      const humanAt = syncHumanTimers(this.room);
+      const expired = Object.entries(this.room.humanTimers || {}).find(
+        ([, timer]) => timer.deadline <= Date.now()
+      );
+      if (expired) {
+        const seat = Number(expired[0]),
+          action = humanTimeoutAction(this.room, seat);
+        const backup = structuredClone(serialized(this.room));
+        try {
+          requireThat(action, '超时操作无效');
+          applyGameAction(this.room, seat, action);
+          delete this.room.humanTimers[seat];
+          this.room.revision++;
+          this.room.updatedAt = Date.now();
+          await this.commit({ operation: 'human-timeout', actor: seat, action });
+        } catch (error) {
+          this.room = revived(backup);
+          console.error('Human timeout failed', error.message);
+          await this.ctx.storage.setAlarm(Date.now() + 1000);
+        }
+        return;
+      }
       const pending = this.room?.game?.pending;
       if (pending?.autoSettleAt) {
         if (Date.now() < pending.autoSettleAt) {
@@ -989,7 +1054,7 @@ export class GameRoom {
       if (this.room?.aiThinking) {
         const retryAt = this.room.aiThinking.startedAt + DEEPSEEK_THINKING_TIMEOUT_MS;
         if (Date.now() < retryAt) {
-          await this.ctx.storage.setAlarm(retryAt);
+          await this.ctx.storage.setAlarm(Math.min(retryAt, humanAt));
           return;
         }
         this.room.aiThinking = null;
@@ -999,10 +1064,13 @@ export class GameRoom {
         return;
       }
       const next = this.nextBot();
-      if (!next) return;
+      if (!next) {
+        if (Number.isFinite(humanAt)) await this.ctx.storage.setAlarm(humanAt);
+        return;
+      }
       const due = nextAIActionAt(this.room, next);
       if (Date.now() < due) {
-        await this.ctx.storage.setAlarm(due);
+        await this.ctx.storage.setAlarm(Math.min(due, humanAt));
         return;
       }
       const backup = serialized(this.room);
