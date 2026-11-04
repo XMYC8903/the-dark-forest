@@ -4,12 +4,40 @@ import {
   summarizeBuildings,
   observerHandColor,
   broadcastPresentation,
+  newLatestCards,
   strikeFeedback,
   strikeNotice
 } from '../dist/view-model.js';
 import { Game, CARDS, COLORS } from '../shared/game.js';
 import { spectatorGameView } from '../server/room-core.js';
 import { sanitizeReplayArchive } from '../dist/replay-archive.js';
+
+test('广播回应和结算同时发生时，只为新回应牌播放入场动画', () => {
+  const previous = {
+    kind: 'broadcast',
+    batchId: 'batch',
+    revealed: false,
+    cards: [
+      { id: 'hidden-caster', actor: 0 },
+      { id: 'hidden-response', actor: 1 }
+    ]
+  };
+  const current = {
+    kind: 'broadcast',
+    batchId: 'batch',
+    revealed: true,
+    cards: [
+      { id: 'caster', actor: 0 },
+      { id: 'response', actor: 1 },
+      { id: 'new', actor: 2 }
+    ]
+  };
+  assert.deepEqual(
+    newLatestCards(previous, current).map((card) => card.id),
+    ['new']
+  );
+  assert.deepEqual(newLatestCards(current, current), []);
+});
 
 test('观战和回放里的光速飞船保留紫色，其他牌继续使用原有颜色', () => {
   const game = new Game({ count: 3, demo: false, seed: 73 });

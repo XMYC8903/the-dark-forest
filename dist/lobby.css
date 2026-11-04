@@ -450,6 +450,12 @@
 .ai-picker button:hover {
   border-color: #a0b68f;
 }
+.ai-picker button.add-success {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #273223;
+  opacity: 1;
+}
 .room-start {
   width: 100%;
   justify-content: center;

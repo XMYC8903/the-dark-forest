@@ -1,5 +1,22 @@
 import { CARDS, COLORS, GALAXIES } from './game.js';
 
+// Revealed broadcast cards get new public IDs and may change their role label.
+// Each player can contribute only one card to a broadcast.
+export function newLatestCards(previous, current) {
+  const oldCards = previous?.cards || [];
+  const revealingSameBroadcast =
+    current?.kind === 'broadcast' &&
+    current.batchId &&
+    current.batchId === previous?.batchId &&
+    current.revealed &&
+    !previous.revealed;
+  return (current?.cards || []).filter((card) =>
+    revealingSameBroadcast
+      ? !oldCards.some((old) => old.actor === card.actor)
+      : !oldCards.some((old) => old.id === card.id)
+  );
+}
+
 // Live spectator cards contain names and types; older replay cards may also
 // contain keys. Resolve both against the same authoritative card colors.
 export function observerHandColor(card) {

@@ -13,9 +13,10 @@ import {
   summarizeBuildings,
   broadcastEffect,
   broadcastPresentation,
+  newLatestCards,
   strikeFeedback,
   strikeNotice
-} from './view-model.js?v=20261025-green-loss-mark';
+} from './view-model.js?v=20261105-response-animation1';
 import { mountCardDrag } from './card-drag.js';
 
 const $ = (s) => document.querySelector(s);
@@ -166,6 +167,7 @@ function toast(text, tone = '') {
   clearTimeout(toastTimer);
   $('#toast').textContent = text;
   $('#toast').classList.toggle('strike-hit', tone === 'strike-hit');
+  $('#toast').classList.toggle('timeout', tone === 'timeout');
   $('#toast').classList.add('visible');
   $('#status-message').textContent = text;
   toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 3400);
@@ -1483,38 +1485,28 @@ async function animateOnlineChange(
           : centerRect($(`[data-player="${strike.owner}"] .avatar`));
       flights.push(flyTo(strike.card, source, $(`[data-strike-id="${strike.id}"]`), { cardSize }));
     }
-  const sameBroadcast =
-    game.latest?.kind === 'broadcast' &&
-    game.latest.batchId &&
-    game.latest.batchId === previous.latest?.batchId;
-  const skipLatestAnimation = new Set(
-    sameBroadcast && game.latest.revealed && !previous.latest.revealed
-      ? game.latest.cards.map((c) => c.id)
-      : previous.latest?.cards.map((c) => c.id) || []
-  );
   const latestCardAlreadyHasAFlight =
     game.latest?.kind === 'build' ||
     (game.latest?.kind === 'strike' && game.latest.cards.some((c) => c.role === '发射'));
-  for (const c of game.latest?.cards || [])
-    if (!skipLatestAnimation.has(c.id)) {
-      const mine = c.actor === viewer,
-        original = before.hand.find((x) => x.id === c.id),
-        isRemoved = origins.has(c.id);
-      const source = mine
-        ? originRect || origins.get(c.id) || (original ? centerRect($('#hand')) : null)
-        : isRemoved
-          ? origins.get(c.id)
-          : centerRect($(`[data-player="${c.actor}"] .avatar`));
-      if (!latestCardAlreadyHasAFlight)
-        flights.push(
-          flyTo(
-            game.latest.revealed ? c : { id: c.id },
-            source,
-            $(`#latest-content [data-latest-id="${c.id}"]`),
-            { back: !game.latest.revealed, cardSize }
-          )
-        );
-    }
+  for (const c of newLatestCards(previous.latest, game.latest)) {
+    const mine = c.actor === viewer,
+      original = before.hand.find((x) => x.id === c.id),
+      isRemoved = origins.has(c.id);
+    const source = mine
+      ? originRect || origins.get(c.id) || (original ? centerRect($('#hand')) : null)
+      : isRemoved
+        ? origins.get(c.id)
+        : centerRect($(`[data-player="${c.actor}"] .avatar`));
+    if (!latestCardAlreadyHasAFlight)
+      flights.push(
+        flyTo(
+          game.latest.revealed ? c : { id: c.id },
+          source,
+          $(`#latest-content [data-latest-id="${c.id}"]`),
+          { back: !game.latest.revealed, cardSize }
+        )
+      );
+  }
   if (game.latest?.revealed && !previous.latest?.revealed)
     $('#latest-content')
       .querySelectorAll('.played-mini')
@@ -1561,7 +1553,7 @@ export async function receiveOnlineRoom(room) {
             : timeout.phase === 'settle'
               ? '选择时间已耗尽，已自动选择回应者'
               : '逃生时间已耗尽，已自动放弃逃生';
-      toast(message);
+      toast(message, 'timeout');
     }
   } finally {
     if (epoch === onlineEpoch) {
