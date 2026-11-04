@@ -1,36 +1,24 @@
 import { CARDS, GALAXIES, distance } from '../shared/game.js';
+import { playerIntelView } from './room-core.js';
+import { inferPositions } from './deepseek-tactics.js';
 
 const pick = (items, rng) => items[Math.floor(rng() * items.length)];
 const defense = (p) => Math.max(0, ...p.builds.map((c) => CARDS[c.key].defense || 0));
-function evidence(view, me, history, level) {
-  const own = view.players[me],
-    recent = history.slice(level === 'hard' ? -160 : -24),
-    result = new Map();
-  for (const p of view.players.filter((p) => p.alive && p.id !== me)) {
-    let possible = GALAXIES.filter((g) => g.id !== own.galaxy && view.markers[g.id] !== 'gray').map(
-      (g) => g.id
-    );
-    if (level !== 'easy')
-      for (const e of recent.filter((e) => e.actor === p.id)) {
-        if (e.type === 'escaped')
-          possible = GALAXIES.filter(
-            (g) => g.id !== own.galaxy && view.markers[g.id] !== 'gray'
-          ).map((g) => g.id);
-        if (e.type === 'broadcast') {
-          const constrained = possible.filter((g) => distance(g, e.target) <= CARDS[e.key].range);
-          if (constrained.length) possible = constrained;
-        }
-      }
-    result.set(p.id, possible);
-  }
-  return result;
+function evidence(view, me, history) {
+  const { players } = inferPositions(view, me, playerIntelView(history, me));
+  return new Map(
+    players.map((player) => [
+      player.id,
+      new Map(player.locations.map(({ galaxy, probability }) => [galaxy, probability]))
+    ])
+  );
 }
 export function decideAI(view, me, level = 'normal', history = [], rng = Math.random) {
   const p = view.players[me],
     b = view.pending,
     hard = level === 'hard',
     easy = level === 'easy',
-    known = evidence(view, me, history, level);
+    known = evidence(view, me, history);
   if (view.over || !p?.alive) return null;
   if (b?.kind === 'escape')
     return b.victim === me ? { type: 'escape', use: easy ? rng() > 0.25 : true } : null;
@@ -81,8 +69,7 @@ export function decideAI(view, me, level = 'normal', history = [], rng = Math.ra
   const incoming = view.strikes.filter((s) => s.target === p.galaxy),
     threat = Math.max(0, ...incoming.map((s) => CARDS[s.card.key].level));
   const positionChance = (id, g) => {
-    const candidates = known.get(id) || [];
-    return candidates.includes(g) ? 1 / candidates.length : 0;
+    return known.get(id)?.get(g) || 0;
   };
   const legal = p.hand.filter((c) => {
     const d = CARDS[c.key];
@@ -135,9 +122,16 @@ export function decideAI(view, me, level = 'normal', history = [], rng = Math.ra
         action: { type: 'play', cardId: c.id, target }
       });
     } else if (targets.length) {
-      const attempts = history.filter((e) => e.type === 'launch' && e.actor === me).slice(-8);
-      const ratings = targets
+      const possibleTargets = targets
         .map((g) => ({
+          g,
+          occupancy: [...known.keys()].reduce((sum, id) => sum + positionChance(id, g.id), 0)
+        }))
+        .filter((target) => target.occupancy > 0);
+      if (!possibleTargets.length) continue;
+      const attempts = history.filter((e) => e.type === 'launch' && e.actor === me).slice(-8);
+      const ratings = possibleTargets
+        .map(({ g }) => ({
           g,
           score:
             [...known.keys()].reduce((sum, id) => {
@@ -154,7 +148,7 @@ export function decideAI(view, me, level = 'normal', history = [], rng = Math.ra
             rng() * 0.15
         }))
         .sort((a, b) => b.score - a.score);
-      const target = easy ? pick(targets, rng).id : ratings[0].g.id;
+      const target = easy ? pick(possibleTargets, rng).g.id : ratings[0].g.id;
       let score = easy ? rng() * 12 : ratings[0].score - d.cost * 0.2 + (view.round > 12 ? 2 : 0);
       if (view.strikes.some((s) => s.owner === me && s.target === target)) score -= hard ? 7 : 2;
       if (

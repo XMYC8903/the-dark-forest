@@ -3,6 +3,7 @@ import { CARDS, GALAXIES, distance } from '../shared/game.js';
 const defense = (p) => Math.max(0, ...p.builds.map((c) => CARDS[c.key].defense || 0));
 const all = () => GALAXIES.map((g) => g.id);
 const rounded = (n) => Math.round(n * 1000) / 1000;
+const keyByCardName = new Map(Object.entries(CARDS).map(([key, card]) => [card.name, key]));
 
 // No authoritative game object enters this module. Every deduction must be
 // reproducible from the bot's filtered view and observations already revealed.
@@ -19,9 +20,10 @@ export function inferPositions(view, me, history = []) {
       if (sets.has(e.actor)) sets.set(e.actor, new Set(all()));
       if (e.from) for (const id of sets.keys()) restrict(id, (g) => g !== e.from);
       for (const [key, launch] of launches) if (launch.actor === e.actor) launches.delete(key);
-    } else if (e.type === 'broadcast' && CARDS[e.key])
-      restrict(e.actor, (g) => distance(g, e.target) <= CARDS[e.key].range);
-    else if (e.type === 'launch') {
+    } else if (e.type === 'broadcast' || e.type === 'broadcast_published') {
+      const key = e.key || keyByCardName.get(e.cardName);
+      if (CARDS[key]) restrict(e.actor, (g) => distance(g, e.target) <= CARDS[key].range);
+    } else if (e.type === 'launch') {
       restrict(e.actor, (g) => g !== e.target);
       if (e.strikeId) launches.set(e.strikeId, e);
     } else if (e.type === 'impact' || e.type === 'lock') {
