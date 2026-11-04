@@ -14,6 +14,67 @@ import {
 } from '../dist/observer-event-filter.js';
 import { gatherIntel } from '../server/room-core.js';
 
+test('建设损失并入同一打击结算，兼容旧回放和跨帧逃生', () => {
+  const a = {
+    type: 'damage',
+    actor: 1,
+    target: 4,
+    round: 1,
+    turnIndex: 4,
+    cards: [{ cardName: '太阳能阵列' }]
+  };
+  const b = {
+    type: 'damage',
+    actor: 1,
+    target: 4,
+    strikeId: 'a',
+    round: 1,
+    turnIndex: 4,
+    cards: [{ cardName: '掩体星环' }]
+  };
+  const eliminated = { type: 'eliminated', actor: 1 };
+  const hit = {
+    type: 'impact',
+    actor: 0,
+    target: 4,
+    victim: 1,
+    strikeId: 'a',
+    outcome: 'eliminated',
+    round: 1,
+    turnIndex: 5
+  };
+  const input = [a, b, eliminated, hit],
+    result = deduplicatePublicHistoryEvents(input);
+  assert.equal(result.length, 2);
+  assert.equal(result[0], eliminated);
+  assert.deepEqual(result[1].buildingLosses, [a, b]);
+  assert.equal(hit.buildingLosses, undefined);
+  assert.equal(
+    matchesObserverEvent(result[1], new Set(['impact_hit']), new Set([0]), new Set([1])),
+    true
+  );
+  assert.deepEqual(deduplicatePublicHistoryEvents([a]), [a]);
+  const other = { ...hit, strikeId: 'b' };
+  assert.deepEqual(deduplicatePublicHistoryEvents([b, other]), [b, other]);
+  assert.deepEqual(deduplicatePublicHistoryEvents([a, { ...hit, victim: 2 }]), [
+    a,
+    { ...hit, victim: 2 }
+  ]);
+  assert.deepEqual(deduplicatePublicHistoryEvents([a, { ...hit, turnIndex: 40 }]), [
+    a,
+    { ...hit, turnIndex: 40 }
+  ]);
+});
+
+test('新对局建设损失记录关联当前打击', () => {
+  const room = { game: { round: 1, turnIndex: 2, players: [] }, intel: [] };
+  gatherIntel(room, [
+    { type: 'strike_arriving', owner: 0, target: 4, strikeId: 'strike-a', card: { key: 'photon' } },
+    { type: 'star_discard', player: 1, target: 4, cards: [{ key: 'solar' }] }
+  ]);
+  assert.equal(room.intel[0].strikeId, 'strike-a');
+});
+
 test('event and player selections combine and empty selections include all', () => {
   const event = { type: 'impact', actor: 0, victim: 2, target: 5 };
   assert.equal(matchesObserverEvent(event, new Set(), new Set()), true);

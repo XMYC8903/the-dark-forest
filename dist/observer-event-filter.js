@@ -75,8 +75,40 @@ export function isPublicHistoryEvent(event) {
 }
 
 export function deduplicatePublicHistoryEvents(events) {
+  // Losses are recorded before the strike resolves, sometimes in an earlier
+  // frame while the victim decides whether to escape. Join only the nearest
+  // subsequent impact at the same location and for the same victim.
+  const nearestImpact = new Map(),
+    losses = new Map(),
+    mergedDamage = new Set();
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.type === 'impact') nearestImpact.set(event.target, i);
+    if (event.type !== 'damage') continue;
+    const impactIndex = nearestImpact.get(event.target),
+      impact = events[impactIndex];
+    if (
+      !impact ||
+      impact.victim !== event.actor ||
+      (impact.strikeId && event.strikeId && impact.strikeId !== event.strikeId)
+    )
+      continue;
+    // Older records lack strike IDs. Limit the fallback to nearby events so an
+    // incomplete old record cannot attach to an unrelated later strike.
+    if (!impact.strikeId || !event.strikeId) {
+      const turnGap = impact.turnIndex - event.turnIndex;
+      if (impactIndex - i > 20 || (Number.isFinite(turnGap) && (turnGap < 0 || turnGap > 6)))
+        continue;
+    }
+    const previous = losses.get(impactIndex) || [];
+    previous.unshift(event);
+    losses.set(impactIndex, previous);
+    mergedDamage.add(i);
+  }
   const result = [];
-  for (const event of events) {
+  for (let i = 0; i < events.length; i++) {
+    if (mergedDamage.has(i)) continue;
+    const event = losses.has(i) ? { ...events[i], buildingLosses: losses.get(i) } : events[i];
     const prior = result.at(-1),
       expected = event.type === 'miss' ? 'miss' : event.type === 'system_hit' ? 'hit' : null;
     if (

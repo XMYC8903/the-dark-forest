@@ -17,7 +17,7 @@ import {
   observerEventCategoryLabel,
   observerEventHasNoTarget,
   observerEventRoles
-} from './observer-event-filter.js?v=20261103-broadcast-targets1';
+} from './observer-event-filter.js?v=20261104-impact-building-loss1';
 import {
   launchDemo,
   launchOnline,
@@ -1023,7 +1023,7 @@ function renderSpectator(view = room) {
     if (e.type === 'launch')
       return `${who} 发射「${e.cardName || '打击'}」→ ${target} · 费用 ${e.cost} · 飞行中`;
     if (e.type === 'impact')
-      return `${who} 的「${e.cardName || '打击'}」抵达 ${target} · ${{ survived: '防御成功', eliminated: '文明消逝', escaped: '目标跃迁', hit: e.key === 'dimension' ? '星系被降维' : '恒星熄灭', miss: '没有文明受击' }[e.outcome] || '已结算'}${e.victim !== undefined && e.victim !== null ? ' · 目标 ' + actorName(e.victim) : ''} · 已飞 ${e.progress} 回合`;
+      return `${who} 的「${e.cardName || '打击'}」抵达 ${target} · ${{ survived: '防御成功', eliminated: '文明消逝', escaped: '目标跃迁', hit: e.key === 'dimension' ? '星系被降维' : '恒星熄灭', miss: '没有文明受击' }[e.outcome] || '已结算'}${e.victim !== undefined && e.victim !== null ? ' · 目标 ' + actorName(e.victim) : ''} · 已飞 ${e.progress} 回合${e.buildingLosses?.length ? ' · 损失建设：' + e.buildingLosses.flatMap((loss) => (loss.cards || []).map((card) => card.cardName || card.name || '建设')).join('、') : ''}`;
     if (e.type === 'lock')
       return `${who} 使用「${e.cardName || '科技锁死'}」→ ${target}${e.victim !== null && e.victim !== undefined ? ' · ' + actorName(e.victim) + ' 建设被拆除' : ''}${e.removed?.length ? ' · 拆除 ' + e.removed.map((c) => c.cardName).join('、') : ''} · 返还 ${e.refund || 0} 能量`;
     if (e.type === 'discard')
@@ -1118,7 +1118,20 @@ function renderSpectator(view = room) {
       overlap--;
     const appended = recentEvents.length - overlap;
     newEventCount = appended
-      ? Math.min(3, allEvents.slice(-appended).filter((event) => visibleEventSet.has(event)).length)
+      ? Math.min(
+          3,
+          allEvents
+            .slice(-appended)
+            .filter(
+              (event) =>
+                visibleEventSet.has(event) ||
+                (event.type === 'impact' &&
+                  event.strikeId &&
+                  visibleEvents.some(
+                    (visible) => visible.type === 'impact' && visible.strikeId === event.strikeId
+                  ))
+            ).length
+        )
       : 0;
   }
   observerHistory = { roomId: room.id, count: allEvents.length, recent: recentEvents };

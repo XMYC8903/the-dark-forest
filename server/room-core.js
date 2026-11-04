@@ -545,6 +545,7 @@ export function gatherIntel(room, events, batch = {}) {
         type: 'damage',
         actor: e.player,
         target: e.target,
+        ...(arriving?.strikeId ? { strikeId: arriving.strikeId } : {}),
         effect: e.type,
         cards: publicCards(e.cards),
         round,
