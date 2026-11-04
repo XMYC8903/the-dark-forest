@@ -129,6 +129,14 @@ button:not(:disabled):active {
   font-size: 11px;
   color: #a5b39b;
 }
+.online-mode .topbar {
+  position: relative;
+}
+.online-mode .top-status {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
 .live-dot,
 .tiny-dot {
   display: inline-block;

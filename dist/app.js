@@ -1366,7 +1366,7 @@ function renderOnlineChrome() {
   $('#scene-tag').textContent = '在线房间';
   $('.room-title h1').textContent = onlineRoom.name;
   $('.bottom-bar>span:first-child').textContent = '在线对战 · ' + game.players.length + ' 位文明';
-  $('.top-status').innerHTML = '<span class="live-dot"></span>在线房间 · 实时同步';
+  $('.top-status').innerHTML = '<span class="live-dot"></span>在线';
   $('#exit-btn').hidden = false;
   $('#new-btn').hidden = true;
   $('#reset-demo-btn').hidden = true;
