@@ -1,5 +1,6 @@
 import { Game, CARDS, GALAXIES, EDGES, seeded } from '../shared/game.js';
 import { AI_NAMES } from '../dist/ai-labels.js';
+import { aliasText, migrateAliases } from './prompt-alias.js';
 
 export const LEVELS = { easy: '简单', normal: '普通', hard: '困难', deepseek: '云端' };
 function secureRandom() {
@@ -391,7 +392,9 @@ export function newDeepSeekSession(game, me, intel) {
       role: 'user',
       content: '以下是本局公开记录。\n' + JSON.stringify({ publicEvidence: evidence })
     });
-  return { privacyVersion: 1, messages, lastState: state, intelCursor: intel.length };
+  const session = { privacyVersion: 1, messages, lastState: state, intelCursor: intel.length };
+  migrateAliases(session);
+  return session;
 }
 export function appendDeepSeekUpdates(room) {
   if (room.status !== 'playing' || !room.game) return;
@@ -407,13 +410,14 @@ export function appendDeepSeekUpdates(room) {
       room.deepseekSessions[member.id] = newDeepSeekSession(room.game, me, room.intel);
       continue;
     }
+    migrateAliases(stored);
     const delta = stateDelta(stored.lastState, state);
     const evidence = playerIntelView(room.intel.slice(stored.intelCursor || 0), me);
     if (evidence.length) delta.publicEvidence = evidence;
     if (Object.keys(delta).length) {
       stored.messages.push({
         role: 'user',
-        content: '局面更新（记住，勿输出）：\n' + JSON.stringify(delta)
+        content: '局面更新（记住，勿输出）：\n' + aliasText(JSON.stringify(delta), stored)
       });
       stored.lastState = state;
     }

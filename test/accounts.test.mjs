@@ -586,7 +586,7 @@ test('DeepSeek 指标按对局保留最近十局，不删除对局日志及回�
     assert.ok(await storage.get(`audit:${id}:deepseek:0001:metric`));
   assert.equal((await storage.get('deepseek-metric-retention')).length, 10);
 });
-test('大对话分片保存房间，休眠恢复完整且清理旧状态分片', async () => {
+test('大对话独立压缩保存，休眠恢复完整且清理旧状态分片', async () => {
   const storage = new Storage(),
     jobs = [],
     ctx = {
@@ -606,7 +606,7 @@ test('大对话分片保存房间，休眠恢复完整且清理旧状态分片',
   await room.persistRoom();
   const first = await storage.get('room');
   assert.ok(first.chunked);
-  assert.ok(first.parts > 10);
+  assert.ok(first.parts < 10);
   const restored = new GameRoom(ctx, {});
   await jobs.at(-1);
   assert.deepEqual(restored.room.deepseekSessions, room.room.deepseekSessions);
@@ -614,6 +614,112 @@ test('大对话分片保存房间，休眠恢复完整且清理旧状态分片',
   await restored.persistRoom();
   assert.equal(await storage.get(first.key), undefined);
   assert.ok((await storage.get('room')).chunked);
+});
+
+test('各座位会话独立更新，重开时清理旧会话，读取失败不会覆盖记忆', async () => {
+  const storage = new Storage(),
+    jobs = [],
+    ctx = {
+      storage,
+      blockConcurrencyWhile: (fn) => {
+        const p = fn();
+        jobs.push(p);
+        return p;
+      }
+    };
+  const room = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  room.room = newRoom('A2C4E6', 'host', '测试', '房主');
+  room.room.deepseekSessions = {
+    a: { messages: [{ content: '甲' }] },
+    b: { messages: [{ content: '乙' }] }
+  };
+  await room.persistRoom();
+  const refs = structuredClone(room.sessionRefs),
+    previousRoot = await storage.get('room');
+  room.room.revision++;
+  room.room.deepseekSessions.a.messages.push({ content: '新行动' });
+  await room.persistRoom();
+  assert.notEqual(room.sessionRefs.a.key, refs.a.key);
+  assert.equal(room.sessionRefs.b.key, refs.b.key);
+  assert.equal(await storage.get(refs.a.key), undefined);
+  assert.ok(await storage.get(refs.b.key));
+  assert.equal(await storage.get(previousRoot.key), undefined);
+  const goodGet = storage.get.bind(storage);
+  storage.get = async (key) => {
+    if (Array.isArray(key) && key.some((k) => k.startsWith(room.sessionRefs.a.key)))
+      throw Error('temporary read failure');
+    return goodGet(key);
+  };
+  new GameRoom(ctx, {});
+  await assert.rejects(jobs.at(-1), /temporary read failure/);
+  storage.get = goodGet;
+  const restored = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  assert.deepEqual(restored.room.deepseekSessions, room.room.deepseekSessions);
+  restored.room.deepseekSessions = {};
+  restored.room.revision++;
+  const old = Object.values(restored.sessionRefs);
+  await restored.persistRoom();
+  assert.deepEqual(restored.sessionRefs, {});
+  for (const ref of old) assert.equal(await storage.get(ref.key), undefined);
+});
+
+test('旧版内嵌会话迁移后可恢复', async () => {
+  const storage = new Storage(),
+    jobs = [],
+    ctx = {
+      storage,
+      blockConcurrencyWhile: (fn) => {
+        const p = fn();
+        jobs.push(p);
+        return p;
+      }
+    };
+  const old = newRoom('A2C4E6', 'host', '测试', '房主');
+  old.deepseekSessions = { a: { messages: [{ content: '旧对话' }] } };
+  await storage.put('room', old);
+  const room = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  await room.persistRoom();
+  const restored = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  assert.deepEqual(restored.room.deepseekSessions, old.deepseekSessions);
+});
+
+test('保存新会话时根指针写入失败，旧会话仍可恢复', async () => {
+  const storage = new Storage(),
+    jobs = [],
+    ctx = {
+      storage,
+      blockConcurrencyWhile: (fn) => {
+        const p = fn();
+        jobs.push(p);
+        return p;
+      }
+    };
+  const room = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  room.room = newRoom('A2C4E6', 'host', '测试', '房主');
+  room.room.deepseekSessions = { bot: { messages: [{ content: '原记忆' }] } };
+  await room.persistRoom();
+  const root = await storage.get('room'),
+    oldRef = room.sessionRefs.bot;
+  room.room.deepseekSessions.bot.messages.push({ content: '新记忆' });
+  room.room.revision++;
+  const put = storage.put.bind(storage);
+  storage.put = async (key, value) => {
+    if (key === 'room') throw Error('root failed');
+    return put(key, value);
+  };
+  await assert.rejects(room.persistRoom(), /root failed/);
+  storage.put = put;
+  assert.deepEqual(await storage.get('room'), root);
+  assert.ok(await storage.get(oldRef.key));
+  const restored = new GameRoom(ctx, {});
+  await jobs.at(-1);
+  assert.equal(restored.room.deepseekSessions.bot.messages.length, 1);
+  assert.equal(restored.room.deepseekSessions.bot.messages[0].content, '原记忆');
 });
 test('旧匿名座位只允许原 cookie 继承，不能冒领已绑定账号的座位', async () => {
   const jobs = [],

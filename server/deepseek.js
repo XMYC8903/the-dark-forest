@@ -1,5 +1,6 @@
 import { CARDS, GALAXIES, distance } from '../shared/game.js';
 import { gameView, deepSeekRulebook, playerIntelView, newDeepSeekSession } from './room-core.js';
+import { aliasText, migrateAliases } from './prompt-alias.js';
 
 function candidateActions(game, me) {
   const p = game.players[me],
@@ -185,6 +186,7 @@ export async function decideDeepSeek(
     for (const key of Object.keys(session)) delete session[key];
     Object.assign(session, safe);
   }
+  if (session) migrateAliases(session);
   cleanLegacySession(session);
   const requestedWindow = [0, 3, 24, '0', '3', '24'].includes(options.observationWindow)
     ? Number(options.observationWindow)
@@ -196,7 +198,7 @@ export async function decideDeepSeek(
   Object.assign(metric, {
     requestedObservationWindow: requestedWindow,
     observationWindow,
-    promptVersion: 'compact-cards-v2-obs' + observationWindow
+    promptVersion: 'compact-cards-v3-alias-obs' + observationWindow
   });
   const actions = candidateActions(game, me);
   metric.candidates = actions.length;
@@ -234,20 +236,27 @@ export async function decideDeepSeek(
     target: e.target,
     ...(e.key ? { cardKey: e.key } : {})
   }));
+  const aliasSession = session || {};
   const decisionMessage = {
     role: 'user',
     content:
       '现在请决策。卡牌 key 对应规则书的完整牌面；id 用于区分手牌，星系编号对应星图。只输出 JSON：{"choice":候选编号}。当前局面：' +
-      JSON.stringify({
-        me,
-        state: publicState(view, me),
-        ...(observationWindow ? { observations } : {}),
-        legalActions
-      })
+      aliasText(
+        JSON.stringify({
+          me,
+          state: publicState(view, me),
+          ...(observationWindow ? { observations } : {}),
+          legalActions
+        }),
+        aliasSession
+      )
   };
   const conversation = session?.messages || [
     { role: 'system', content: deepSeekRulebook() },
-    { role: 'user', content: '当前局面：' + JSON.stringify(publicState(view, me)) }
+    {
+      role: 'user',
+      content: '当前局面：' + aliasText(JSON.stringify(publicState(view, me)), aliasSession)
+    }
   ];
   const messages = session?.messages || conversation;
   const controller = new AbortController(),

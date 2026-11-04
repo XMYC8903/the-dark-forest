@@ -35,6 +35,8 @@ Worker 配置位于 `wrangler.jsonc`，入口是 `server/worker.js`，共享规�
 
 DeepSeek 只记录统计数据：对局/座位、提示词版本、决策阶段、请求字节与消息数、耗时、API token 用量和缓存命中、失败类别、是否回退及行动是否应用。每次决策保存一条独立的小记录，不保存提示词、响应正文、思考内容或密钥。用量缺失表示未知，不按零计费；推理 token 属于输出 token 的子集，不能重复相加。旧的完整 DeepSeek 日志不会恢复。
 
+DeepSeek 会话按座位压缩保存，房间状态仅保存引用；旧版内嵌会话在下次保存时迁移。读取会话失败时不会用空数据覆盖旧记忆。回滚至不认识 `deepseekSessionRefs` 的旧 Worker 前，需要先准备会话数据迁回方案，避免进行中对局丢失 AI 记忆。
+
 每个房间保留最近 10 局有 DeepSeek 统计的完整记录。房间下一次产生 DeepSeek 统计时检查并清理更早的统计；对局日志和回放不受影响。
 
 导出：`node scripts/export-private-logs.mjs 房间码 对局ID deepseek`。汇总：`node scripts/summarize-deepseek.mjs artifacts/private-logs/文件名.json`（可指定多个文件，重叠记录去重）。汇总包含阶段/提示词版本分组、用量及其已知/未知调用数、缓存命中率、耗时和回退次数；实际费用还需结合调用时适用的价格，字节数不等于 token 数。规则表压缩只对新建的系统消息生效，进行中对局可能沿用旧系统消息，比较时也应参考记录中的 systemBytes。

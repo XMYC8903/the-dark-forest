@@ -20,6 +20,7 @@ import { decideDeepSeek } from './deepseek.js';
 import { nextAIActionAt } from './ai-timing.js';
 import { AccountHub, accountPrincipal, randomCode } from './accounts.js';
 import { logParts, readLog, putRecords } from './private-logs.js';
+import { packSession, readSession, dropSession } from './session-store.js';
 export { AccountHub };
 
 const DEEPSEEK_THINKING_TIMEOUT_MS = 35000;
@@ -354,6 +355,17 @@ export class GameRoom {
         ? await readLog(ctx.storage, this.roomBlob.key, this.roomBlob)
         : envelope;
       this.room = revived(saved);
+      this.sessionRefs = saved?.deepseekSessionRefs || {};
+      this.sessionTexts = {};
+      if (this.room && saved?.deepseekSessionRefs) {
+        this.room.deepseekSessions = {};
+        for (const [id, ref] of Object.entries(this.sessionRefs)) {
+          const session = await readSession(ctx.storage, ref);
+          this.room.deepseekSessions[id] = session;
+          this.sessionTexts[id] = JSON.stringify(session);
+        }
+        delete this.room.deepseekSessionRefs;
+      }
       // Persist schema upgrades before hibernation, so broadcast batch IDs stay stable on reconnect.
       if (
         saved &&
@@ -592,16 +604,47 @@ export class GameRoom {
     return null;
   }
   async persistRoom(writes = {}) {
+    const snapshot = serialized(this.room),
+      sessions = snapshot.deepseekSessions || {};
+    delete snapshot.deepseekSessions;
+    const previousRefs = this.sessionRefs || {},
+      previousTexts = this.sessionTexts || {};
+    const nextRefs = {},
+      nextTexts = {},
+      abandoned = [];
+    for (const [id, session] of Object.entries(sessions)) {
+      const text = JSON.stringify(session);
+      nextTexts[id] = text;
+      if (previousRefs[id] && previousTexts[id] === text) nextRefs[id] = previousRefs[id];
+      else {
+        const packed = await packSession(text);
+        Object.assign(writes, packed.writes);
+        nextRefs[id] = packed.ref;
+      }
+    }
+    for (const [id, ref] of Object.entries(previousRefs))
+      if (nextRefs[id]?.key !== ref.key) abandoned.push(ref);
+    snapshot.deepseekSessionRefs = nextRefs;
     const key = 'room-state:' + this.room.revision + ':' + crypto.randomUUID(),
-      parts = logParts(key, serialized(this.room)),
+      parts = logParts(key, snapshot),
       old = this.roomBlob;
     await putRecords(this.ctx.storage, { ...writes, ...parts });
-    this.roomBlob = { chunked: true, key, parts: parts[key].parts };
-    await this.ctx.storage.put('room', this.roomBlob);
-    if (old) {
-      const keys = Array.from({ length: old.parts }, (_, i) => old.key + ':part:' + i);
-      keys.push(old.key);
-      for (const k of keys) await this.ctx.storage.delete(k);
+    const newRoomBlob = { chunked: true, key, parts: parts[key].parts };
+    await this.ctx.storage.put('room', newRoomBlob);
+    this.roomBlob = newRoomBlob;
+    this.sessionRefs = nextRefs;
+    this.sessionTexts = nextTexts;
+    // Cleanup happens only after the new root is durable. Failure may leave
+    // orphaned chunks but must not roll back a successfully saved room.
+    try {
+      if (old) {
+        const keys = Array.from({ length: old.parts }, (_, i) => old.key + ':part:' + i);
+        keys.push(old.key);
+        for (const k of keys) await this.ctx.storage.delete(k);
+      }
+      for (const ref of abandoned) await dropSession(this.ctx.storage, ref);
+    } catch {
+      console.warn('Old room or DeepSeek session chunks could not be removed');
     }
   }
   async recordDeepseekMetric(key, record) {
