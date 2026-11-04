@@ -181,12 +181,40 @@ test('DeepSeek 指标按对局保留最近十局，不删除对局日志及回�
   for(const id of matches.slice(1))assert.ok(await storage.get(`audit:${id}:deepseek:0001:metric`));
   assert.equal((await storage.get('deepseek-metric-retention')).length,10);
 });
-test('大对话分片保存房间，休眠恢复完整且清理旧状态分片',async()=>{
+test('大对话移出房间分片并单独压缩保存，休眠恢复完整且清理旧分片',async()=>{
   const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const p=fn();jobs.push(p);return p;}};
-  const room=new GameRoom(ctx,{});await jobs.at(-1);room.room=newRoom('A2C4E6','host','测试','房主');room.room.deepseekSessions={bot:{messages:[{role:'system',content:'大提示词🚀'.repeat(40000)}]}};
-  await room.persistRoom();const first=await storage.get('room');assert.ok(first.chunked);assert.ok(first.parts>10);
+  const room=new GameRoom(ctx,{});await jobs.at(-1);room.room=newRoom('A2C4E6','host','测试','房主');
+  // Incompressible on purpose: repeated text would shrink below the chunk limit.
+  const noise=Array.from({length:60000},(_,i)=>(i*2654435761%4294967296).toString(36)).join(' ');
+  room.room.deepseekSessions={bot:{messages:[{role:'system',content:noise}]}};room.room.deepseekSessionsDirty=true;
+  await room.persistRoom();const first=await storage.get('room');
+  assert.ok(first.chunked);
+  // The room blob no longer carries the conversation; a compressed session log does.
+  assert.ok(first.parts<10,'房间分片应保持很小');
+  const sessionKeys=[...storage.map.keys()].filter(key=>key.startsWith('dss:')&&!key.includes(':part:'));
+  assert.equal(sessionKeys.length,1);
+  const sessionParts=[...storage.map.keys()].filter(key=>key.startsWith('dss:')&&key.includes(':part:'));
+  assert.ok(sessionParts.length>10,'会话应分片保存');
+  assert.ok(storage.map.get(sessionParts[0]).length<20000,'分片不得超过存储单值上限');
   const restored=new GameRoom(ctx,{});await jobs.at(-1);assert.deepEqual(restored.room.deepseekSessions,room.room.deepseekSessions);
-  restored.room.revision++;await restored.persistRoom();assert.equal(await storage.get(first.key),undefined);assert.ok((await storage.get('room')).chunked);
+  const oldSessionKey=sessionKeys[0];
+  restored.room.revision++;restored.room.deepseekSessionsDirty=true;await restored.persistRoom();
+  assert.equal(await storage.get(first.key),undefined);assert.ok((await storage.get('room')).chunked);
+  assert.equal(storage.map.has(oldSessionKey),false,'旧会话分片应被清理');
+});
+test('未变化的对话不会在仅元数据提交时重写',async()=>{
+  const storage=new Storage(),jobs=[],ctx={storage,blockConcurrencyWhile:fn=>{const p=fn();jobs.push(p);return p;}};
+  const room=new GameRoom(ctx,{});await jobs.at(-1);room.room=newRoom('A2C4E6','host','测试','房主');
+  room.room.deepseekSessions={bot:{messages:[{role:'system',content:'提示词'}]}};room.room.deepseekSessionsDirty=true;
+  await room.persistRoom();
+  const sessionKey=[...storage.map.keys()].find(key=>key.startsWith('dss:')&&!key.includes(':part:'));
+  const before=storage.map.get(sessionKey);
+  const writes=[];const originalPut=storage.put.bind(storage);
+  storage.put=async records=>{writes.push(...Object.keys(records));return originalPut(records);};
+  room.room.revision++;await room.persistRoom();
+  assert.equal(storage.map.get(sessionKey),before,'未变脏时不应重写会话');
+  assert.equal(writes.some(key=>key.startsWith('dss:')),false);
+  storage.put=originalPut;
 });
 test('旧匿名座位只允许原 cookie 继承，不能冒领已绑定账号的座位',async()=>{
   const jobs=[],ctx={storage:new Storage(),blockConcurrencyWhile:fn=>{const p=fn();jobs.push(p);return p;}};

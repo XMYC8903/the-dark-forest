@@ -4,6 +4,7 @@ import {decideDeepSeek} from './deepseek.js';
 import {nextAIActionAt} from './ai-timing.js';
 import {AccountHub,accountPrincipal,randomCode} from './accounts.js';
 import {logParts,readLog,putRecords} from './private-logs.js';
+import {packSessions,readSessions,dropSessions} from './session-store.js';
 export {AccountHub};
 
 const DEEPSEEK_THINKING_TIMEOUT_MS=35000;
@@ -161,7 +162,11 @@ export class GameRoom {
     this.ctx=ctx;this.env=env;this.room=null;this.rates=new Map();
     ctx.blockConcurrencyWhile(async()=>{
       const envelope=await ctx.storage.get('room');this.roomBlob=envelope?.chunked?envelope:null;
-      const saved=this.roomBlob?await readLog(ctx.storage,this.roomBlob.key,this.roomBlob):envelope;this.room=revived(saved);
+      const saved=this.roomBlob?await readLog(ctx.storage,this.roomBlob.key,this.roomBlob):envelope;
+      this.sessionBlob=saved?.deepseekSessionRef||null;
+      this.room=revived(saved);
+      if(this.room&&this.sessionBlob)this.room.deepseekSessions=await readSessions(ctx.storage,this.sessionBlob);
+      if(this.room)this.room.deepseekSessionsDirty=false;
       // Persist schema upgrades before hibernation, so broadcast batch IDs stay stable on reconnect.
       if(saved&&(!Array.isArray(saved.spectators)||saved.game?.pending?.kind==='broadcast'&&!saved.game.pending.publicId||saved.members.some(p=>p.bot&&/^(简单|普通|困难) AI \d+$/.test(p.name)))){
         this.room.revision++;await this.persistRoom();
@@ -286,10 +291,25 @@ export class GameRoom {
     return null;
   }
   async persistRoom(writes={}){
-    const key='room-state:'+this.room.revision+':'+crypto.randomUUID(),parts=logParts(key,serialized(this.room)),old=this.roomBlob;
+    // Conversations live in their own compressed chunks: the room blob then stays
+    // small, and commits that only touch metadata skip rewriting the transcripts.
+    const snapshot={...this.room,game:saveGame(this.room.game)};
+    const sessions=snapshot.deepseekSessions;
+    delete snapshot.deepseekSessions;
+    delete snapshot.deepseekSessionsDirty;
+    let sessionRef=this.sessionBlob||null;
+    if(sessions&&(this.room.deepseekSessionsDirty||!sessionRef)){
+      const packed=await packSessions(this.ctx.storage,this.room.revision,sessions);
+      Object.assign(writes,packed.writes);
+      sessionRef=packed.ref;
+    }
+    snapshot.deepseekSessionRef=sessionRef;
+    const key='room-state:'+this.room.revision+':'+crypto.randomUUID(),parts=logParts(key,snapshot),old=this.roomBlob,oldSessions=this.sessionBlob;
     await putRecords(this.ctx.storage,{...writes,...parts});
     this.roomBlob={chunked:true,key,parts:parts[key].parts};await this.ctx.storage.put('room',this.roomBlob);
     if(old){const keys=Array.from({length:old.parts},(_,i)=>old.key+':part:'+i);keys.push(old.key);for(const k of keys)await this.ctx.storage.delete(k);}
+    if(oldSessions&&oldSessions.key!==sessionRef?.key)await dropSessions(this.ctx.storage,oldSessions);
+    this.sessionBlob=sessionRef;this.room.deepseekSessionsDirty=false;
   }
   async recordDeepseekMetric(key,record){
     const storage=this.ctx.storage,indexKey='deepseek-metric-retention',matchId=record.matchId;
@@ -470,7 +490,7 @@ export class GameRoom {
       }
       const backup=serialized(this.room);
       try {
-        if(deepseekTask.session?.messages)this.room.deepseekSessions[deepseekTask.sessionId]=deepseekTask.session;
+        if(deepseekTask.session?.messages){this.room.deepseekSessions[deepseekTask.sessionId]=deepseekTask.session;this.room.deepseekSessionsDirty=true;}
         if(!action){fallback=true;console.warn('DeepSeek unavailable; using local Zhizi policy');action=decideAI(gameView(this.room.game,deepseekTask.player),deepseekTask.player,'hard',this.room.intel);}
         if(!action)throw new Error('AI 没有生成有效行动');
         this.room.aiThinking=null;

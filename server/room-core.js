@@ -1,5 +1,6 @@
 import {Game, CARDS, GALAXIES, EDGES, seeded} from '../shared/game.js';
 import {AI_NAMES} from '../dist/ai-labels.js';
+import {aliasText} from './prompt-alias.js';
 
 export const LEVELS = {easy:'简单', normal:'普通', hard:'困难', deepseek:'云端'};
 function secureRandom(){const rng=()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296;rng.state=()=>null;return rng;}
@@ -169,7 +170,11 @@ export function newDeepSeekSession(game,me,intel){
     {role:'user',content:'本局开始或记忆已安全重建。以下是我的当前视角；现在不需要输出行动。\n'+JSON.stringify(state)}
   ];
   if(evidence.length)messages.push({role:'user',content:'以下是本局公开记录。\n'+JSON.stringify({publicEvidence:evidence})});
-  return {privacyVersion:1,messages,lastState:state,intelCursor:intel.length};
+  const session={privacyVersion:1,aliases:{},messages,lastState:state,intelCursor:intel.length};
+  // Fold long UUIDs into short per-seat aliases once, so every later message uses
+  // the same identifier the model has already seen.
+  for(const message of messages)message.content=aliasText(message.content,session);
+  return session;
 }
 export function appendDeepSeekUpdates(room) {
   if(room.status!=='playing'||!room.game)return;
@@ -181,14 +186,16 @@ export function appendDeepSeekUpdates(room) {
       // Old messages may already contain private coordinates. Rebuild rather
       // than replaying any untrusted legacy conversation.
       room.deepseekSessions[member.id]=newDeepSeekSession(room.game,me,room.intel);
+      room.deepseekSessionsDirty=true;
       continue;
     }
     const delta=stateDelta(stored.lastState,state);
     const evidence=playerIntelView(room.intel.slice(stored.intelCursor||0),me);
     if(evidence.length)delta.publicEvidence=evidence;
     if(Object.keys(delta).length){
-      stored.messages.push({role:'user',content:'局面更新（记住，勿输出）：\n'+JSON.stringify(delta)});
+      stored.messages.push({role:'user',content:'局面更新（记住，勿输出）：\n'+aliasText(JSON.stringify(delta),stored)});
       stored.lastState=state;
+      room.deepseekSessionsDirty=true;
     }
     stored.intelCursor=room.intel.length;
   }

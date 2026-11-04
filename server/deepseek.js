@@ -1,5 +1,6 @@
 import {CARDS,GALAXIES,distance} from '../shared/game.js';
 import {gameView,deepSeekRulebook,playerIntelView,newDeepSeekSession} from './room-core.js';
+import {aliasText} from './prompt-alias.js';
 
 function candidateActions(game,me) {
   const p=game.players[me],pending=game.pending;
@@ -92,10 +93,14 @@ export async function decideDeepSeek(game,me,history,apiKey,fetchImpl=fetch,sess
     ...(action.cardId?{cardKey:pCardKey(game,me,action.cardId)}:{}),
     ...(action.ids?{cardKeys:action.ids.map(id=>pCardKey(game,me,id))}:{})}));
   const observations=playerIntelView(observationWindow?history.slice(-observationWindow):[],me).map(e=>({type:e.type,actor:e.actor,target:e.target,...(e.key?{cardKey:e.key}:{})}));
-  const decisionMessage={role:'user',content:'现在请决策。卡牌 key 对应规则书的完整牌面；id 用于区分手牌，星系编号对应星图。只输出 JSON：{"choice":候选编号}。当前局面：'+JSON.stringify({me,state:publicState(view,me),...(observationWindow?{observations}:{}),legalActions})};
+  // Aliases are prompt-only: the reply is a candidate index, so shortening ids in
+  // the text cannot affect how the chosen action is applied.
+  const aliasSession=session||{aliases:{}};
+  const decisionPayload=JSON.stringify({me,state:publicState(view,me),...(observationWindow?{observations}:{}),legalActions});
+  const decisionMessage={role:'user',content:'现在请决策。卡牌 key 对应规则书的完整牌面；id 用于区分手牌，星系编号对应星图。只输出 JSON：{"choice":候选编号}。当前局面：'+aliasText(decisionPayload,aliasSession)};
   const conversation=session?.messages||[
     {role:'system',content:deepSeekRulebook()},
-    {role:'user',content:'当前局面：'+JSON.stringify(publicState(view,me))}
+    {role:'user',content:'当前局面：'+aliasText(JSON.stringify(publicState(view,me)),aliasSession)}
   ];
   const messages=session?.messages||conversation;
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
