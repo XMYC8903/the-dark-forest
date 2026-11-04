@@ -59,8 +59,15 @@ test('广播超时按强制规则选择合法牌，其他情况不回应', () =>
   game.pending = { kind: 'broadcast', publicId: 'batch', caster: 0, decisions: [], responses: [] };
   syncHumanTimers(room, 1000);
   game.isForced = () => true;
-  game.responseOptions = () => [{ id: 'legal' }];
-  assert.deepEqual(humanTimeoutAction(room, 1), { type: 'respond', cardId: 'legal' });
+  game.responseOptions = () => [{ id: 'first' }, { id: 'second' }];
+  assert.deepEqual(
+    humanTimeoutAction(room, 1, () => 0),
+    { type: 'respond', cardId: 'first' }
+  );
+  assert.deepEqual(
+    humanTimeoutAction(room, 1, () => 0.99),
+    { type: 'respond', cardId: 'second' }
+  );
   game.isForced = () => false;
   assert.deepEqual(humanTimeoutAction(room, 1), { type: 'respond' });
 });

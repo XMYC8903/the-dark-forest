@@ -32,7 +32,7 @@ export function syncHumanTimers(room, now = Date.now()) {
   return Math.min(Infinity, ...Object.values(next).map((timer) => timer.deadline));
 }
 
-export function humanTimeoutAction(room, seat) {
+export function humanTimeoutAction(room, seat, rng = Math.random) {
   const game = room.game,
     timer = room.humanTimers?.[seat];
   if (!timer) return null;
@@ -41,7 +41,8 @@ export function humanTimeoutAction(room, seat) {
   if (timer.phase === 'settle')
     return { type: 'settle', chosen: game.pending.responses[0]?.actor ?? null };
   if (timer.phase === 'respond') {
-    const card = game.isForced(seat) ? game.responseOptions(seat)[0] : null;
+    const options = game.isForced(seat) ? game.responseOptions(seat) : [];
+    const card = options[Math.floor(rng() * options.length)];
     return card ? { type: 'respond', cardId: card.id } : { type: 'respond' };
   }
   return null;
