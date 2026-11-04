@@ -1303,7 +1303,7 @@ humanTimerElement.className = 'human-action-timer';
 humanTimerElement.hidden = true;
 humanTimerElement.innerHTML =
   '<span class="human-action-timer-reading"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.2v4.1l2.6 1.5"></path></svg><span class="human-action-timer-seconds"></span></span>';
-document.body.append(humanTimerElement);
+document.querySelector('.room-toolbar').append(humanTimerElement);
 let extendingHumanTimer = false;
 let humanTimerClockOffset = 0;
 function updateHumanTimer() {
@@ -1328,7 +1328,7 @@ function showHumanTimerFeedback() {
   if (!layer) return;
   const rect = humanTimerElement.getBoundingClientRect(),
     feedback = document.createElement('span');
-  feedback.className = 'energy-delta gain';
+  feedback.className = 'energy-delta human-timer-delta';
   feedback.textContent = '+30s';
   feedback.style.left = `${rect.left + rect.width / 2}px`;
   feedback.style.top = `${rect.bottom - 4}px`;

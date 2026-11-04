@@ -2746,11 +2746,11 @@ main {
 }
 .human-action-timer {
   appearance: none;
-  position: fixed;
+  position: absolute;
   z-index: 110;
-  top: max(8px, env(safe-area-inset-top));
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   gap: 0;
@@ -2771,17 +2771,17 @@ main {
 }
 .human-action-timer:hover:not(:disabled),
 .human-action-timer:focus-visible {
-  color: #73efa8;
-  text-shadow: 0 0 10px #73efa855;
+  color: var(--accent);
+  text-shadow: 0 0 10px #d1dfad55;
 }
 .human-action-timer:focus-visible {
   outline: none;
 }
 .human-action-timer:active:not(:disabled) {
-  transform: translateX(-50%) scale(0.96);
+  transform: translate(-50%, -50%) scale(0.96);
 }
 .human-action-timer:disabled {
-  color: #9cce8c;
+  color: var(--accent);
   cursor: default;
 }
 .human-action-timer:not(.extended):disabled {
@@ -2805,6 +2805,12 @@ main {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.5;
+}
+.human-timer-delta {
+  color: var(--accent);
+}
+.room-toolbar {
+  position: relative;
 }
 @media (max-width: 700px) and (orientation: portrait) {
   .human-action-timer {
