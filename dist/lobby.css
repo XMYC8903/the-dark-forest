@@ -455,6 +455,7 @@
   border-color: #405966;
   background: #20313b;
   color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
   opacity: 1;
 }
 .room-start {
