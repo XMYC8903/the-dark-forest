@@ -1297,11 +1297,12 @@ export function launchOnline(room, transport) {
   applyOnlineRoom(room);
   maybeOnlinePrompt();
 }
-const humanTimerElement = document.createElement('div');
+const humanTimerElement = document.createElement('button');
+humanTimerElement.type = 'button';
 humanTimerElement.className = 'human-action-timer';
 humanTimerElement.hidden = true;
 humanTimerElement.innerHTML =
-  '<span class="human-action-timer-reading"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.2v4.1l2.6 1.5"></path></svg><span class="human-action-timer-seconds"></span></span><button type="button">加时 30 秒</button>';
+  '<span class="human-action-timer-reading"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.2v4.1l2.6 1.5"></path></svg><span class="human-action-timer-seconds"></span></span>';
 document.body.append(humanTimerElement);
 let extendingHumanTimer = false;
 let humanTimerClockOffset = 0;
@@ -1315,11 +1316,27 @@ function updateHumanTimer() {
     Math.ceil((timer.deadline - Date.now() - humanTimerClockOffset) / 1000)
   );
   humanTimerElement.querySelector('.human-action-timer-seconds').textContent = `${remaining}s`;
-  const button = humanTimerElement.querySelector('button');
-  button.disabled = Boolean(timer.extended || extendingHumanTimer || !remaining);
-  button.textContent = timer.extended ? '已加时' : '加时 30 秒';
+  humanTimerElement.disabled = Boolean(timer.extended || extendingHumanTimer || !remaining);
+  humanTimerElement.classList.toggle('extended', Boolean(timer.extended));
+  humanTimerElement.setAttribute(
+    'aria-label',
+    timer.extended ? `剩余 ${remaining} 秒，本步已加时` : `剩余 ${remaining} 秒，点击加时 30 秒`
+  );
 }
-humanTimerElement.querySelector('button').onclick = async () => {
+function showHumanTimerFeedback() {
+  const layer = $('#energy-fx-layer');
+  if (!layer) return;
+  const rect = humanTimerElement.getBoundingClientRect(),
+    feedback = document.createElement('span');
+  feedback.className = 'energy-delta gain';
+  feedback.textContent = '+30s';
+  feedback.style.left = `${rect.left + rect.width / 2}px`;
+  feedback.style.top = `${rect.bottom - 4}px`;
+  layer.append(feedback);
+  feedback.addEventListener('animationend', () => feedback.remove(), { once: true });
+  setTimeout(() => feedback.remove(), 4300);
+}
+humanTimerElement.onclick = async () => {
   const timer = onlineRoom?.humanTimer,
     bridge = online;
   if (
@@ -1333,6 +1350,7 @@ humanTimerElement.querySelector('button').onclick = async () => {
   updateHumanTimer();
   try {
     await receiveOnlineRoom(await bridge.extendTime(timer.id));
+    showHumanTimerFeedback();
   } catch (error) {
     toast(error.message);
     bridge.reconnect();

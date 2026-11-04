@@ -23,7 +23,7 @@ import {
   launchOnline,
   receiveOnlineRoom,
   suspendTable
-} from './app.js?v=20261104-human-timer2';
+} from './app.js?v=20261104-human-timer3';
 import { AI_NAMES } from './ai-labels.js';
 import { requestId } from './request-id.js';
 import { CARDS, GALAXIES, EDGES } from './game.js';

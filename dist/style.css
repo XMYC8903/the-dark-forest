@@ -2745,6 +2745,7 @@ main {
   }
 }
 .human-action-timer {
+  appearance: none;
   position: fixed;
   z-index: 110;
   top: max(8px, env(safe-area-inset-top));
@@ -2752,14 +2753,43 @@ main {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
   color: #91a0b2;
   font-family: 'Space Grotesk', sans-serif;
   font-size: 13px;
   white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    text-shadow 160ms ease;
 }
 .human-action-timer[hidden] {
   display: none;
+}
+.human-action-timer:hover:not(:disabled),
+.human-action-timer:focus-visible {
+  color: #73efa8;
+  text-shadow: 0 0 10px #73efa855;
+}
+.human-action-timer:focus-visible {
+  outline: none;
+}
+.human-action-timer:active:not(:disabled) {
+  transform: translateX(-50%) scale(0.96);
+}
+.human-action-timer:disabled {
+  color: #9cce8c;
+  cursor: default;
+}
+.human-action-timer:not(.extended):disabled {
+  color: #8290a4;
+  opacity: 0.65;
+}
+.human-action-timer.extended:disabled {
+  opacity: 0.65;
 }
 .human-action-timer-reading {
   display: inline-flex;
@@ -2776,22 +2806,8 @@ main {
   stroke-linejoin: round;
   stroke-width: 1.5;
 }
-.human-action-timer button {
-  padding: 8px 0;
-  background: transparent;
-  color: #d4e2bd;
-  cursor: pointer;
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.human-action-timer button:disabled {
-  opacity: 0.65;
-  cursor: default;
-}
 @media (max-width: 700px) and (orientation: portrait) {
   .human-action-timer {
-    gap: 10px;
     font-size: 12px;
   }
 }
