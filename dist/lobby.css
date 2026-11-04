@@ -450,10 +450,11 @@
 .ai-picker button:hover {
   border-color: #a0b68f;
 }
-.ai-picker button.add-success {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #273223;
+.ai-picker button.add-success,
+.ai-picker button.add-success:hover {
+  border-color: #405966;
+  background: #20313b;
+  color: var(--accent);
   opacity: 1;
 }
 .room-start {

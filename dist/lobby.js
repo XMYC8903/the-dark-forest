@@ -654,7 +654,7 @@ function renderRoom() {
               current.originalLabel ??= current.innerHTML;
               clearTimeout(current.successTimer);
               current.classList.add('add-success');
-              current.textContent = '添加成功';
+              current.textContent = '✓ 添加成功';
               current.successTimer = setTimeout(() => {
                 current.classList.remove('add-success');
                 current.innerHTML = current.originalLabel;
