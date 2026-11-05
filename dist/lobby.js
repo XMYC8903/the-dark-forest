@@ -275,11 +275,16 @@ function downloadReplay(replay) {
     url = URL.createObjectURL(blob),
     link = document.createElement('a');
   const finished = new Date(Number(replay.finishedAt || replay.startedAt) || Date.now()),
-    date = [
-      finished.getFullYear(),
-      String(finished.getMonth() + 1).padStart(2, '0'),
-      String(finished.getDate()).padStart(2, '0')
-    ].join('-');
+    date =
+      [
+        finished.getFullYear(),
+        String(finished.getMonth() + 1).padStart(2, '0'),
+        String(finished.getDate()).padStart(2, '0')
+      ].join('-') +
+      '_' +
+      [finished.getHours(), finished.getMinutes()]
+        .map((part) => String(part).padStart(2, '0'))
+        .join('-');
   const accountName =
     String(social.account?.name || '观测者')
       .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
