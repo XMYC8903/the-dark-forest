@@ -172,7 +172,7 @@ function publicState(view, me) {
             kind: 'broadcast',
             caster: view.pending.caster,
             target: view.pending.target,
-            decisions: view.pending.decisions,
+            completedResponders: view.pending.decisions,
             responses: view.pending.responses.map((r) => ({ actor: r.actor }))
           }
         : view.pending
@@ -267,7 +267,7 @@ export async function decideDeepSeek(
   }
   cleanLegacySession(session);
   if (session?.messages?.[0]?.role === 'system') session.messages[0].content = deepSeekRulebook();
-  Object.assign(metric, { observationWindow: 0, promptVersion: 'direct-card-names-v1' });
+  Object.assign(metric, { observationWindow: 0, promptVersion: 'direct-card-names-v2' });
   const actions = candidateActions(game, me);
   metric.candidates = actions.length;
   if (!actions.length) {
@@ -298,6 +298,15 @@ export async function decideDeepSeek(
       aliasText(
         JSON.stringify({
           me,
+          ...(metric.phase === 'respond'
+            ? {
+                decisionContext: `现在轮到玩家 ${me} 回应广播。completedResponders 是已经完成回应的玩家（包括选择不回应的人），不是正在等待回应的玩家。请输出 respond 行动。${
+                  actions.some((action) => action.type === 'respond' && !action.cardId)
+                    ? '你可以选择不回应（card 为 null），也可以使用符合条件的广播牌。'
+                    : '你必须使用符合条件的广播牌回应，不能选择不回应。'
+                }`
+              }
+            : {}),
           state: publicState(view, me)
         }),
         aliasSession

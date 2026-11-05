@@ -142,6 +142,44 @@ test('DeepSeek 直接输出牌名行动并只收到自身手牌', async () => {
   }
 });
 
+test('广播回应提示明确当前玩家、已完成回应者和是否允许不回应', async () => {
+  const game = new Game({ count: 3, demo: false, seed: 73 });
+  const player = game.players[1];
+  player.energy = 10;
+  player.hand = [
+    { id: 'a', key: 'hyper_c' },
+    { id: 'b', key: 'hyper_d' }
+  ];
+  game.pending = {
+    kind: 'broadcast',
+    caster: 2,
+    target: game.players[0].galaxy,
+    card: { id: 'broadcast', key: 'stellar_c' },
+    decisions: [0],
+    responses: []
+  };
+  for (const forced of [false, true]) {
+    game.pending.target = forced ? player.galaxy : game.players[0].galaxy;
+    let prompt;
+    const action = await decideDeepSeek(game, 1, [], 'key', async (_url, init) => {
+      const body = JSON.parse(init.body);
+      prompt = JSON.parse(body.messages.at(-1).content.split('当前局面：')[1]);
+      return Response.json({
+        choices: [
+          { message: { content: JSON.stringify({ type: 'respond', card: '超距广播·合作' }) } }
+        ]
+      });
+    });
+    assert.deepEqual(action, { type: 'respond', cardId: 'a' });
+    assert.deepEqual(prompt.state.pending.completedResponders, [0]);
+    assert.equal(prompt.state.pending.decisions, undefined);
+    assert.match(prompt.decisionContext, /轮到玩家 1 回应广播/);
+    assert.match(prompt.decisionContext, /已经完成回应/);
+    assert.match(prompt.decisionContext, forced ? /必须使用/ : /可以选择不回应/);
+  }
+  assert.match(deepSeekRulebook(), /decisions（旧记录）.*已经完成回应/);
+});
+
 test('完整牌名映射实体牌并验证弃牌数量、广播牌面和各阶段行动', () => {
   const game = new Game({ count: 3, demo: false, seed: 73 });
   const p = game.players[0];
