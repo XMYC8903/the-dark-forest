@@ -8,6 +8,41 @@
   border-radius: 9px;
   background: #172632;
 }
+
+.replay-thoughts-overlay {
+  z-index: 150;
+}
+.replay-thoughts-dialog {
+  width: min(760px, 100%);
+}
+.replay-thoughts-list {
+  max-height: min(60dvh, 600px);
+  overflow-y: auto;
+}
+.replay-thoughts-list details {
+  padding: 10px 0;
+  border-bottom: 1px solid #344253;
+}
+.replay-thoughts-list summary {
+  color: var(--accent);
+  cursor: pointer;
+}
+.replay-thoughts-list pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.7;
+  color: #c7d5df;
+}
+.replay-thoughts-list button {
+  min-height: 32px;
+  padding: 6px 10px;
+}
+@media (max-width: 700px) {
+  .observer-replay-controls {
+    flex-wrap: wrap;
+  }
+}
 .room-entry-info {
   min-width: 0;
 }

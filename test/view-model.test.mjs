@@ -50,9 +50,11 @@ test('观战和回放里的光速飞船保留紫色，其他牌继续使用原�
     format: 'dark-forest-replay',
     version: 1,
     events: [],
+    thoughts: [{ frameIndex: 0, player: 1, round: 1, phase: 'turn', text: '第一行\n第二行' }],
     frames: [{ eventCount: 0, game: view }]
   });
   assert.equal(observerHandColor(replay.frames[0].game.players[0].hand[0]), CARDS.lightship.color);
+  assert.equal(replay.thoughts[0].text, '第一行\n第二行');
   assert.equal(observerHandColor({ name: CARDS.solar.name, type: 'build' }), COLORS.build);
   assert.equal(observerHandColor({ name: '未知', type: 'strike' }), COLORS.strike);
 });

@@ -349,6 +349,7 @@ export class GameRoom {
     this.env = env;
     this.room = null;
     this.rates = new Map();
+    this.pendingDeepseekMetrics = new Map();
     ctx.blockConcurrencyWhile(async () => {
       const envelope = await ctx.storage.get('room');
       this.roomBlob = envelope?.chunked ? envelope : null;
@@ -707,7 +708,7 @@ export class GameRoom {
         });
         for (const [entry, value] of page) {
           const match = entry.match(/^audit:([a-f0-9-]{36}):deepseek:/i);
-          if (match && value?.kind === 'deepseek' && value.schemaVersion === 1)
+          if (match && value?.kind === 'deepseek' && (value.schemaVersion === 1 || value.parts))
             found.set(match[1], Math.max(found.get(match[1]) || 0, Number(value.at) || 0));
         }
         const keys = [...page.keys()];
@@ -715,7 +716,11 @@ export class GameRoom {
       } while (cursor);
       matches = [...found].map(([id, at]) => ({ id, at }));
     }
-    await storage.put(key, record);
+    if (new TextEncoder().encode(JSON.stringify(record)).length > 100000) {
+      const parts = logParts(key, record);
+      parts[key].schemaVersion = 1;
+      await putRecords(storage, parts);
+    } else await storage.put(key, record);
     if (matches.some((m) => m.id === matchId)) {
       if (!bootstrap) return;
     } else matches.push({ id: matchId, at: record.at });
@@ -944,6 +949,64 @@ export class GameRoom {
       (await readLog(this.ctx.storage, ordered.at(-1)[0], ordered.at(-1)[1])).state
     );
     requireThat(final.over, '对局日志尚未结束，无法生成回放', 409);
+    await Promise.all(
+      [...this.pendingDeepseekMetrics.values()]
+        .filter((entry) => entry.matchId === matchId)
+        .map((entry) => entry.promise)
+    );
+    if (this.metricQueue) await this.metricQueue.catch(() => {});
+    const thoughts = [];
+    let metricCursor = '';
+    const metricPrefix = `audit:${matchId}:deepseek:`;
+    do {
+      const page = await this.ctx.storage.list({
+        prefix: metricPrefix,
+        ...(metricCursor ? { startAfter: metricCursor } : {}),
+        limit: 1000
+      });
+      for (const [key, meta] of page) {
+        if (key.includes(':part:') || (!meta?.parts && meta?.schemaVersion !== 1)) continue;
+        let record;
+        try {
+          record = meta.parts ? await readLog(this.ctx.storage, key, meta) : meta;
+        } catch {
+          console.warn('DeepSeek reasoning record could not be read');
+          continue;
+        }
+        if (
+          !record ||
+          !Number.isInteger(record.revision) ||
+          typeof record.reasoningContent !== 'string' ||
+          !record.reasoningContent
+        )
+          continue;
+        const targetRevision = record.revision + (record.applied ? 1 : 0);
+        let low = 0,
+          high = frames.length;
+        while (low < high) {
+          const middle = Math.floor((low + high) / 2);
+          if (frames[middle].revision < targetRevision) low = middle + 1;
+          else high = middle;
+        }
+        const frameIndex = record.applied
+          ? low
+          : low < frames.length && frames[low].revision === targetRevision
+            ? low
+            : low - 1;
+        if (frameIndex < 0 || frameIndex >= frames.length) continue;
+        thoughts.push({
+          frameIndex,
+          player: record.player,
+          round: record.round,
+          phase: record.phase,
+          applied: Boolean(record.applied),
+          fallback: Boolean(record.fallback),
+          text: record.reasoningContent
+        });
+      }
+      const keys = [...page.keys()];
+      metricCursor = keys.length === 1000 ? keys.at(-1) : '';
+    } while (metricCursor);
     return {
       format: 'dark-forest-replay',
       version: 1,
@@ -955,6 +1018,7 @@ export class GameRoom {
       rounds: final.round,
       winner: final.winner,
       players: reference.players,
+      thoughts,
       events,
       frames
     };
@@ -1129,8 +1193,17 @@ export class GameRoom {
     });
     if (!deepseekTask) return;
 
+    let finishPendingMetric;
+    const pendingMetric = new Promise((resolve) => {
+      finishPendingMetric = resolve;
+    });
+    this.pendingDeepseekMetrics.set(deepseekTask.token, {
+      matchId: deepseekTask.matchId,
+      promise: pendingMetric
+    });
     let action = null,
       metric = null,
+      reasoningContent = null,
       applied = false,
       fallback = false;
     try {
@@ -1145,7 +1218,12 @@ export class GameRoom {
         (value) => {
           metric = value;
         },
-        { observationWindow: this.env.DEEPSEEK_OBSERVATIONS }
+        {
+          observationWindow: this.env.DEEPSEEK_OBSERVATIONS,
+          onReasoning: (value) => {
+            reasoningContent = value;
+          }
+        }
       );
     } catch (error) {
       console.warn('DeepSeek decision failed', error?.message || 'unknown error');
@@ -1205,7 +1283,8 @@ export class GameRoom {
           round: deepseekTask.game.round,
           applied,
           fallback,
-          appliedActionType: applied ? action.type : null
+          appliedActionType: applied ? action.type : null,
+          ...(reasoningContent ? { reasoningContent } : {})
         };
         this.metricQueue = (this.metricQueue || Promise.resolve())
           .catch(() => {})
@@ -1214,6 +1293,13 @@ export class GameRoom {
           this.metricQueue.catch(() => console.warn('DeepSeek metrics could not be saved'))
         );
       }
+      const finished = this.metricQueue || Promise.resolve();
+      finished
+        .catch(() => {})
+        .finally(() => {
+          this.pendingDeepseekMetrics.delete(deepseekTask.token);
+          finishPendingMetric();
+        });
     }
   }
   webSocketMessage(ws, message) {

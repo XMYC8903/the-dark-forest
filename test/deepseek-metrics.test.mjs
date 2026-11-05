@@ -99,6 +99,38 @@ test('forced decisions, timeouts, and failing metrics callbacks do not break pla
   assert.ok(action);
 });
 
+test('返回的思考内容可单独记录，日志回调异常不影响决策', async () => {
+  const thoughts = [];
+  const fake = async () =>
+    Response.json({
+      choices: [
+        { message: { content: '{"choice":0}', reasoning_content: '先检查防御。\n再选择行动。' } }
+      ]
+    });
+  const action = await decideDeepSeek(
+    new Game({ count: 3 }),
+    0,
+    [],
+    'secret',
+    fake,
+    null,
+    null,
+    null,
+    {
+      onReasoning: (value) => thoughts.push(value)
+    }
+  );
+  assert.ok(action);
+  assert.deepEqual(thoughts, ['先检查防御。\n再选择行动。']);
+  assert.ok(
+    await decideDeepSeek(new Game({ count: 3 }), 0, [], 'secret', fake, null, null, null, {
+      onReasoning: () => {
+        throw Error('storage failed');
+      }
+    })
+  );
+});
+
 test('summary counts unknown usage separately and reasoning is not added to completion tokens', () => {
   const base = {
     kind: 'deepseek',

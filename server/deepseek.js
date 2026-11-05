@@ -300,6 +300,14 @@ export async function decideDeepSeek(
     }
     metric.status = 'invalid_response';
     const data = JSON.parse(raw);
+    const reasoning = data?.choices?.[0]?.message?.reasoning_content;
+    if (typeof reasoning === 'string' && reasoning) {
+      try {
+        options.onReasoning?.(reasoning);
+      } catch {
+        /* Recording must not change the decision. */
+      }
+    }
     const content = data?.choices?.[0]?.message?.content;
     if (typeof data.model === 'string' && /^deepseek-[a-z0-9._-]{1,80}$/i.test(data.model))
       metric.responseModel = data.model;

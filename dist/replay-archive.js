@@ -317,6 +317,27 @@ export function sanitizeReplayArchive(source) {
     players: (source.players || [])
       .slice(0, 6)
       .map((p, i) => ({ name: safeText(p.name || `文明 ${i + 1}`, 32), bot: Boolean(p.bot) })),
+    thoughts: (Array.isArray(source.thoughts) ? source.thoughts : [])
+      .slice(0, 12000)
+      .filter(
+        (entry) =>
+          entry &&
+          Number.isInteger(entry.frameIndex) &&
+          entry.frameIndex >= 0 &&
+          entry.frameIndex < frames.length &&
+          safeIndex(entry.player) !== null &&
+          typeof entry.text === 'string' &&
+          entry.text.length > 0
+      )
+      .map((entry) => ({
+        frameIndex: entry.frameIndex,
+        player: safeIndex(entry.player),
+        round: Math.max(1, Number(entry.round) || 1),
+        phase: safeText(entry.phase, 24),
+        applied: Boolean(entry.applied),
+        fallback: Boolean(entry.fallback),
+        text: entry.text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+      })),
     events,
     frames
   };

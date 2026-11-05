@@ -108,6 +108,37 @@ test('回放按账号授权从对局日志生成，复用房间后仍可读取�
     await storage.put(
       logParts(`audit:${matchId}:game:${String(record.revision).padStart(12, '0')}`, record)
     );
+  const thinking = '分析局面。\n'.repeat(30000);
+  await room.recordDeepseekMetric(`audit:${matchId}:deepseek:0150:thought`, {
+    kind: 'deepseek',
+    schemaVersion: 1,
+    matchId,
+    at: 150,
+    player: 1,
+    revision: 1,
+    round: 1,
+    phase: 'turn',
+    applied: true,
+    reasoningContent: thinking
+  });
+  const meta = await storage.get(`audit:${matchId}:deepseek:0150:thought`);
+  assert.ok(meta.parts > 1);
+  assert.equal(
+    (await readLog(storage, `audit:${matchId}:deepseek:0150:thought`, meta)).reasoningContent,
+    thinking
+  );
+  await room.recordDeepseekMetric(`audit:${matchId}:deepseek:0151:thought`, {
+    kind: 'deepseek',
+    schemaVersion: 1,
+    matchId,
+    at: 151,
+    player: 1,
+    revision: 1,
+    round: 1,
+    phase: 'turn',
+    applied: false,
+    reasoningContent: '未执行的思考'
+  });
   room.room = {
     ...newRoom('A2C4E6', 'host', '测试房间', '回放甲', 50),
     matchId,
@@ -119,6 +150,10 @@ test('回放按账号授权从对局日志生成，复用房间后仍可读取�
     ],
     replayAccountIds: [alice.account.id, bob.account.id]
   };
+  const adminLogs = await room.fetch(
+    new Request(`https://internal/internal/logs?kind=deepseek&match=${matchId}`)
+  );
+  assert.equal((await adminLogs.json()).entries[0].reasoningContent, thinking);
   assert.equal((await room.saveReplayArchive()).saved, 2);
   assert.equal([...f.storage.map.keys()].filter((k) => k.startsWith('replay-data:')).length, 0);
   const before = await f.storage.get(`replay-index:${alice.account.id}:${matchId}`);
@@ -126,12 +161,67 @@ test('回放按账号授权从对局日志生成，复用房间后仍可读取�
   assert.deepEqual(await f.storage.get(`replay-index:${alice.account.id}:${matchId}`), before);
   room.room = newRoom('A2C4E6', 'other', '新对局', '新房主');
   assert.equal((await getReplay(outsider.token, matchId)).status, 404);
-  const result = await getReplay(alice.token, matchId);
+  let finishMetric;
+  const pendingMetric = new Promise((resolve) => {
+    finishMetric = resolve;
+  });
+  room.pendingDeepseekMetrics.set('last-decision', { matchId, promise: pendingMetric });
+  let replayFinished = false;
+  const replayRequest = getReplay(alice.token, matchId).then((value) => {
+    replayFinished = true;
+    return value;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(replayFinished, false);
+  await room.recordDeepseekMetric(`audit:${matchId}:deepseek:0152:thought`, {
+    kind: 'deepseek',
+    schemaVersion: 1,
+    matchId,
+    at: 152,
+    player: 1,
+    revision: 1,
+    round: 1,
+    phase: 'turn',
+    applied: true,
+    reasoningContent: '最后一步的思考'
+  });
+  room.pendingDeepseekMetrics.delete('last-decision');
+  finishMetric();
+  const result = await replayRequest;
   assert.equal(result.status, 200);
   assert.equal(result.replay.frames.length, 2);
   assert.equal(result.replay.events.length, 1);
   assert.equal(result.replay.frames[1].game.players[0].energy, game.players[0].energy);
   assert.equal(result.replay.frames[1].game.players[0].hand.length, 4);
+  assert.deepEqual(result.replay.thoughts, [
+    {
+      frameIndex: 1,
+      player: 1,
+      round: 1,
+      phase: 'turn',
+      applied: true,
+      fallback: false,
+      text: thinking
+    },
+    {
+      frameIndex: 0,
+      player: 1,
+      round: 1,
+      phase: 'turn',
+      applied: false,
+      fallback: false,
+      text: '未执行的思考'
+    },
+    {
+      frameIndex: 1,
+      player: 1,
+      round: 1,
+      phase: 'turn',
+      applied: true,
+      fallback: false,
+      text: '最后一步的思考'
+    }
+  ]);
   assert.equal((await getReplay(bob.token, matchId)).replay.matchId, matchId);
   const legacy = {
     format: 'dark-forest-replay',
@@ -534,7 +624,7 @@ test('房间只保存单键统计记录，管理员日志接口可读取且普�
   const original = globalThis.fetch;
   globalThis.fetch = async () =>
     Response.json({
-      choices: [{ message: { content: '{"choice":0}' } }],
+      choices: [{ message: { content: '{"choice":0}', reasoning_content: '评估防御后行动' } }],
       usage: { prompt_tokens: 123 }
     });
   try {
@@ -548,6 +638,7 @@ test('房间只保存单键统计记录，管理员日志接口可读取且普�
   assert.equal(logs[0][0].includes(':part:'), false);
   assert.equal(logs[0][1].applied, true);
   assert.equal(logs[0][1].usage.promptTokens, 123);
+  assert.equal(logs[0][1].reasoningContent, '评估防御后行动');
   const response = await room.fetch(new Request('https://internal/internal/logs?kind=deepseek'));
   assert.equal(response.status, 200);
   assert.equal((await response.json()).entries.length, 1);
