@@ -28,6 +28,30 @@ test('回放模块校验并净化导入数据', () => {
   assert.equal(result.frames[0].eventCount, 0);
 });
 
+test('浏览器缺少 randomUUID 时仍可导入没有对局 ID 的回放', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined });
+  try {
+    const players = [0, 1, 2].map((i) => ({ name: `玩家${i}`, hand: [], builds: [] }));
+    const replay = {
+      format: 'dark-forest-replay',
+      version: 1,
+      events: [],
+      frames: [{ eventCount: 0, game: { players, strikes: [], markers: {} } }]
+    };
+    validateReplayArchive(replay);
+    const clean = sanitizeReplayArchive(replay);
+    assert.match(
+      clean.matchId,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
+    assert.equal(clean.frames[0].game.players.length, 3);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'crypto', descriptor);
+    else delete globalThis.crypto;
+  }
+});
+
 test('回放动画保留回合生产的产能数值，多次净化后仍可读取', () => {
   const players = [0, 1, 2].map((i) => ({
     name: '玩家' + i,

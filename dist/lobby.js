@@ -1,7 +1,7 @@
 import {
   validateReplayArchive,
   sanitizeReplayArchive
-} from './replay-archive.js?v=20261105-reasoning1';
+} from './replay-archive.js?v=20261105-replay-id1';
 import {
   saveResumeArchive,
   loadResumeArchive,
@@ -407,7 +407,7 @@ async function startReplay(archive, { index = 0, playing = true, resumeId = null
   const clean = sanitizeReplayArchive(archive);
   let cacheFailed = false;
   if (!resumeId) {
-    const id = crypto.randomUUID();
+    const id = requestId();
     try {
       await saveResumeArchive(id, clean);
       sessionStorage.setItem(replayResumeKey, JSON.stringify({ id, index: 0, playing: true }));

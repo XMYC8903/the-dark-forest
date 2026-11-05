@@ -1,4 +1,5 @@
 import { CARDS } from './game.js';
+import { requestId } from './request-id.js';
 
 export function validateReplayArchive(archive) {
   if (
@@ -304,7 +305,7 @@ export function sanitizeReplayArchive(source) {
   });
   const matchId = /^[a-f0-9-]{36}$/.test(String(source.matchId || ''))
     ? source.matchId
-    : crypto.randomUUID();
+    : requestId();
   return {
     format: 'dark-forest-replay',
     version: 1,
