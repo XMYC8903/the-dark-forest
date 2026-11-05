@@ -6,10 +6,10 @@ import { summarize } from '../scripts/summarize-deepseek.mjs';
 
 test('metrics preserve usage even for truncated or invalid choices, without retaining content', async () => {
   for (const [content, reason, status] of [
-    ['{"choice":0}', 'stop', 'success'],
-    ['{"choice":999999}', 'stop', 'invalid_choice'],
+    ['{"type":"end"}', 'stop', 'success'],
+    ['{"type":"play","card":"不存在"}', 'stop', 'invalid_action'],
     ['incomplete', 'length', 'truncated'],
-    ['not JSON', 'stop', 'invalid_choice']
+    ['not JSON', 'stop', 'invalid_action']
   ]) {
     const records = [];
     await decideDeepSeek(
@@ -38,13 +38,49 @@ test('metrics preserve usage even for truncated or invalid choices, without reta
     assert.equal(records.length, 1);
     const record = records[0];
     assert.equal(record.status, status);
-    assert.equal(record.usage.cacheHitTokens, 80);
-    assert.equal(record.usage.reasoningTokens, 10);
+    const attempts = status === 'invalid_action' ? 2 : 1;
+    assert.equal(record.attempts.length, attempts);
+    assert.equal(record.usage.cacheHitTokens, 80 * attempts);
+    assert.equal(record.usage.reasoningTokens, 10 * attempts);
     assert.ok(record.requestBytes > 0);
     assert.ok(record.messageCount > 0);
     for (const key of ['messages', 'content', 'reasoning_content', 'request', 'response', 'apiKey'])
       assert.equal(record[key], undefined);
   }
+});
+
+test('非法行动只重试一次，统计两次实际用量', async () => {
+  let requests = 0;
+  const metrics = [];
+  const result = await decideDeepSeek(
+    new Game({ count: 3 }),
+    0,
+    [],
+    'secret',
+    async () => {
+      requests++;
+      return Response.json({
+        choices: [
+          {
+            message: {
+              content: requests === 1 ? '{"type":"play","card":"不存在"}' : '{"type":"end"}'
+            }
+          }
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5 }
+      });
+    },
+    null,
+    null,
+    (value) => metrics.push(value)
+  );
+  assert.deepEqual(result, { type: 'end' });
+  assert.equal(requests, 2);
+  assert.equal(metrics[0].usage.promptTokens, 20);
+  assert.equal(metrics[0].usage.completionTokens, 10);
+  assert.equal(metrics[0].attempts[0].status, 'invalid_action');
+  assert.equal(metrics[0].attempts[1].status, 'success');
+  assert.equal(summarize([{ ...metrics[0], kind: 'deepseek', schemaVersion: 1 }]).apiCalls, 2);
 });
 
 test('forced decisions, timeouts, and failing metrics callbacks do not break play', async () => {
@@ -89,7 +125,7 @@ test('forced decisions, timeouts, and failing metrics callbacks do not break pla
     0,
     [],
     'secret',
-    async () => Response.json({ choices: [{ message: { content: '{"choice":0}' } }] }),
+    async () => Response.json({ choices: [{ message: { content: '{"type":"end"}' } }] }),
     null,
     null,
     () => {
@@ -104,7 +140,7 @@ test('返回的思考内容可单独记录，日志回调异常不影响决策',
   const fake = async () =>
     Response.json({
       choices: [
-        { message: { content: '{"choice":0}', reasoning_content: '先检查防御。\n再选择行动。' } }
+        { message: { content: '{"type":"end"}', reasoning_content: '先检查防御。\n再选择行动。' } }
       ]
     });
   const action = await decideDeepSeek(

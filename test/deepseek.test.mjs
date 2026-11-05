@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, CARDS } from '../shared/game.js';
-import { decideDeepSeek } from '../server/deepseek.js';
+import {
+  decideDeepSeek,
+  candidateActions,
+  publicCommand,
+  resolveCommand
+} from '../server/deepseek.js';
 import {
   gameView,
   applyGameAction,
@@ -55,140 +60,157 @@ test('紧凑规则表保留每张牌的所有规则和属性', () => {
   }
 });
 
-test('事件重复窗口可切换，完整公开记录和候选信息保持一致；缺失历史时恢复 24 条', async () => {
+test('决策不重复附带近期事件，完整公开记录保留在会话中', async () => {
   const game = new Game({ count: 3, demo: false }),
-    history = Array.from({ length: 30 }, (_, i) => ({
-      type: 'launch',
-      actor: 1,
-      target: (i % 9) + 1,
-      key: 'nuclear',
-      round: i + 1
-    }));
-  const prompts = [];
-  for (const window of [24, 3, 0]) {
-    const session = newDeepSeekSession(game, 0, history);
-    let metrics;
-    await decideDeepSeek(
+    history = [{ type: 'launch', actor: 1, target: 4, key: 'nuclear' }];
+  for (const session of [null, newDeepSeekSession(game, 0, history)]) {
+    let body, metrics;
+    const result = await decideDeepSeek(
       game,
       0,
       history,
       'key',
-      async (_url, request) => {
-        const messages = JSON.parse(request.body).messages,
-          prompt = JSON.parse(messages.at(-1).content.split('当前局面：')[1]);
-        assert.deepEqual(JSON.parse(messages[2].content.split('\n')[1]).publicEvidence, history);
-        assert.equal(prompt.observations?.length || 0, window);
-        prompts.push(prompt);
-        return Response.json({ choices: [{ message: { content: '{"choice":0}' } }] });
+      async (_url, init) => {
+        body = JSON.parse(init.body);
+        return Response.json({ choices: [{ message: { content: '{"type":"end"}' } }] });
       },
       session,
       null,
-      (e) => {
-        metrics = e;
-      },
-      { observationWindow: window }
+      (value) => {
+        metrics = value;
+      }
     );
-    assert.equal(metrics.observationWindow, window);
-  }
-  const normalize = ({ observations, ...rest }) => ({
-    ...rest,
-    legalActions: rest.legalActions
-      .map(({ choice, ...c }) => c)
-      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
-  });
-  assert.deepEqual(normalize(prompts[0]), normalize(prompts[1]));
-  assert.deepEqual(normalize(prompts[0]), normalize(prompts[2]));
-  for (const session of [null, { ...newDeepSeekSession(game, 0, []), intelCursor: 0 }]) {
-    let metrics;
-    await decideDeepSeek(
-      game,
-      0,
-      history,
-      'key',
-      async () => Response.json({ choices: [{ message: { content: '{"choice":0}' } }] }),
-      session,
-      null,
-      (e) => {
-        metrics = e;
-      },
-      { observationWindow: 0 }
-    );
-    assert.equal(metrics.observationWindow, 24);
+    const payload = JSON.parse(body.messages.at(-1).content.split('当前局面：')[1]);
+    assert.equal(payload.observations, undefined);
+    assert.equal(payload.legalActions, undefined);
+    assert.deepEqual(JSON.parse(body.messages[2].content.split('\n')[1]).publicEvidence, history);
+    assert.deepEqual(result, { type: 'end' });
+    assert.equal(metrics.observationWindow, 0);
   }
 });
 
-test('DeepSeek 使用 Flash 深入思考并只收到玩家可见局面与合法候选', async () => {
-  const game = new Game({ count: 3, demo: false, seed: 73 });
-  let requestBody;
-  const session = {
-    privacyVersion: 1,
-    messages: [
-      { role: 'system', content: '完整规则和星图' },
-      { role: 'user', content: '开局状态' }
-    ]
-  };
+test('会话落后时补充过滤后的公开事件，不丢弃之前对话', async () => {
+  const game = new Game({ count: 3, demo: false });
+  const history = [
+    { type: 'launch', actor: 1, target: 4 },
+    { type: 'build', actor: 1, target: game.players[1].galaxy, key: 'solar' }
+  ];
+  const session = newDeepSeekSession(game, 0, history.slice(0, 1));
+  session.messages.push({ role: 'assistant', content: '之前的决策' });
   const action = await decideDeepSeek(
     game,
     0,
-    [],
-    'test-secret',
-    async (url, init) => {
-      assert.equal(url, 'https://api.deepseek.com/chat/completions');
-      assert.equal(init.headers.Authorization, 'Bearer test-secret');
-      requestBody = JSON.parse(init.body);
-      return Response.json({ choices: [{ message: { content: '{"choice":0}' } }] });
-    },
+    history,
+    'key',
+    async () => Response.json({ choices: [{ message: { content: '{"type":"end"}' } }] }),
     session
   );
-  assert.equal(requestBody.model, 'deepseek-flash');
-  assert.deepEqual(requestBody.thinking, { type: 'enabled' });
-  assert.equal(requestBody.reasoning_effort, 'high');
-  assert.equal(requestBody.max_tokens, 8192);
-  assert.deepEqual(requestBody.response_format, { type: 'json_object' });
-  const prompt = JSON.parse(requestBody.messages.at(-1).content.split('当前局面：')[1]);
-  assert.ok(requestBody.messages[0].content.startsWith('完整规则和星图'));
-  assert.equal(requestBody.messages[1].content, '开局状态');
-  assert.equal(session.messages.at(-1).role, 'assistant');
-  let nextBody;
-  await decideDeepSeek(
+  assert.deepEqual(action, { type: 'end' });
+  assert.ok(session.messages.some((message) => message.content === '之前的决策'));
+  const update = session.messages.find((message) => message.content.includes('牌局更新（记住'));
+  assert.equal(JSON.parse(update.content.split('\n')[1]).publicEvidence[0].target, undefined);
+  assert.equal(session.intelCursor, history.length);
+});
+
+test('DeepSeek 直接输出牌名行动并只收到自身手牌', async () => {
+  const game = new Game({ count: 3, demo: false, seed: 73 });
+  let body;
+  const session = newDeepSeekSession(game, 0, []);
+  const result = await decideDeepSeek(
     game,
     0,
     [],
-    'test-secret',
+    'secret',
     async (_url, init) => {
-      nextBody = JSON.parse(init.body);
-      return Response.json({ choices: [{ message: { content: '{"choice":0}' } }] });
+      body = JSON.parse(init.body);
+      return Response.json({ choices: [{ message: { content: '{"type":"end"}' } }] });
     },
     session
   );
-  assert.ok(nextBody.messages.some((message, index) => message.role === 'assistant' && index > 1));
-  assert.ok(
-    nextBody.messages.length > requestBody.messages.length,
-    'next decision replays earlier turns and updates'
-  );
-  assert.equal(prompt.state.players[0].hand.length, 4);
+  assert.deepEqual(result, { type: 'end' });
+  assert.equal(body.model, 'deepseek-flash');
+  assert.deepEqual(body.thinking, { type: 'enabled' });
+  assert.equal(body.reasoning_effort, 'high');
+  assert.equal(body.max_tokens, 8192);
+  const prompt = JSON.parse(body.messages.at(-1).content.split('当前局面：')[1]);
+  assert.equal(prompt.legalActions, undefined);
+  assert.ok(prompt.state.players[0].hand.every((card) => typeof card === 'string'));
   assert.equal(prompt.state.players[0].galaxy, game.players[0].galaxy);
   for (const player of prompt.state.players.slice(1)) {
     assert.equal(player.hand, undefined);
     assert.equal(player.galaxy, undefined);
   }
-  assert.ok(prompt.legalActions.length > 1);
-  assert.ok(
-    prompt.legalActions.every(
-      (x) => Number.isInteger(x.choice) && x.action && !('score' in x) && !('reason' in x)
-    )
+});
+
+test('完整牌名映射实体牌并验证弃牌数量、广播牌面和各阶段行动', () => {
+  const game = new Game({ count: 3, demo: false, seed: 73 });
+  const p = game.players[0];
+  p.energy = 20;
+  p.hand = [
+    { id: 'a', key: 'nuclear' },
+    { id: 'b', key: 'nuclear' },
+    { id: 'c', key: 'stellar_c' },
+    { id: 'd', key: 'stellar_d' }
+  ];
+  const target = p.galaxy === 1 ? 2 : 1;
+  let actions = candidateActions(game, 0);
+  const shot = resolveCommand(game, 0, actions, { type: 'play', card: '热核打击', target });
+  assert.ok(['a', 'b'].includes(shot.cardId));
+  assert.equal(
+    resolveCommand(game, 0, actions, { type: 'play', card: '热核打击', target: p.galaxy }),
+    null
   );
-  const hand = new Map(prompt.state.players[0].hand.map((card) => [card.id, card.key]));
-  assert.ok([...hand.values()].every((key) => CARDS[key]));
-  for (const candidate of prompt.legalActions) {
-    if (candidate.action.cardId) assert.equal(candidate.cardKey, hand.get(candidate.action.cardId));
-    if (candidate.action.ids)
-      assert.deepEqual(
-        candidate.cardKeys,
-        candidate.action.ids.map((id) => hand.get(id))
-      );
-  }
-  assert.deepEqual(action, prompt.legalActions[0].action);
+  const discarded = resolveCommand(game, 0, actions, {
+    type: 'discard',
+    cards: ['热核打击', '热核打击']
+  });
+  assert.deepEqual(new Set(discarded.ids), new Set(['a', 'b']));
+  assert.equal(
+    resolveCommand(game, 0, actions, {
+      type: 'discard',
+      cards: ['热核打击', '热核打击', '热核打击']
+    }),
+    null
+  );
+  game.pending = { kind: 'broadcast', caster: 1, target: p.galaxy, decisions: [], responses: [] };
+  actions = candidateActions(game, 0);
+  assert.equal(
+    resolveCommand(game, 0, actions, { type: 'respond', card: '恒星广播·合作' }).cardId,
+    'c'
+  );
+  assert.equal(
+    resolveCommand(game, 0, actions, { type: 'respond', card: '恒星广播·伪装' }).cardId,
+    'd'
+  );
+  assert.equal(resolveCommand(game, 0, actions, { type: 'respond', card: '恒星广播' }), null);
+  assert.equal(resolveCommand(game, 0, actions, { type: 'respond', card: null }), null);
+  game.pending = {
+    kind: 'broadcast',
+    caster: 0,
+    decisions: [1, 2],
+    responses: [{ actor: 1 }, { actor: 2 }]
+  };
+  actions = candidateActions(game, 0);
+  assert.deepEqual(resolveCommand(game, 0, actions, { type: 'settle', chosen: 2 }), {
+    type: 'settle',
+    chosen: 2
+  });
+  game.pending = { kind: 'escape', victim: 0 };
+  actions = candidateActions(game, 0);
+  assert.deepEqual(resolveCommand(game, 0, actions, { type: 'escape', use: true }), {
+    type: 'escape',
+    use: true
+  });
+  game.pending = null;
+  game.strikes = [
+    { id: 's1', owner: 0, target, progress: 1, card: { id: 's1', key: 'nuclear' } },
+    { id: 's2', owner: 0, target, progress: 2, card: { id: 's2', key: 'nuclear' } }
+  ];
+  actions = candidateActions(game, 0);
+  assert.deepEqual(
+    resolveCommand(game, 0, actions, { type: 'withdraw', card: '热核打击', target, progress: 2 }),
+    { type: 'withdraw', strikeId: 's2' }
+  );
 });
 
 test('DeepSeek 过滤对手隐藏坐标，并安全重建旧对话且保留公开线索', async () => {
@@ -252,13 +274,13 @@ test('DeepSeek 过滤对手隐藏坐标，并安全重建旧对话且保留公�
     'key',
     async (_url, init) => {
       request = JSON.parse(init.body);
-      return Response.json({ choices: [{ message: { content: '{"choice":0}' } }] });
+      return Response.json({ choices: [{ message: { content: '{"type":"end"}' } }] });
     },
     session
   );
   const decision = JSON.parse(request.messages.at(-1).content.split('当前局面：')[1]);
-  assert.equal(decision.observations[0].target, undefined);
-  assert.equal(decision.observations[2].target, 4);
+  assert.equal(decision.observations, undefined);
+  assert.ok(request.messages.some((message) => message.content.includes('publicEvidence')));
   const legacy = { messages: [{ role: 'user', content: '旧秘密 ' + JSON.stringify(room.intel) }] };
   await decideDeepSeek(
     game,
@@ -267,7 +289,7 @@ test('DeepSeek 过滤对手隐藏坐标，并安全重建旧对话且保留公�
     'key',
     async (_url, init) => {
       request = JSON.parse(init.body);
-      return Response.json({ choices: [{ message: { content: '{"choice":0}' } }] });
+      return Response.json({ choices: [{ message: { content: '{"type":"end"}' } }] });
     },
     legacy
   );
@@ -428,7 +450,7 @@ test('模型请求与战术分析不会随对手隐藏手牌和坐标改变', as
   const fake = async (_url, init) => {
     requests.push(JSON.parse(init.body));
     return Response.json({
-      choices: [{ message: { content: '{"choice":0,"plan":"优先发展经济，保留有效防御"}' } }]
+      choices: [{ message: { content: '{"type":"end"}' } }]
     });
   };
   await decideDeepSeek(game, 0, [], 'secret', fake);
@@ -443,9 +465,6 @@ test('模型请求与战术分析不会随对手隐藏手牌和坐标改变', as
       message = copy.messages.at(-1),
       prefix = '当前局面：';
     const data = JSON.parse(message.content.split(prefix)[1]);
-    data.legalActions = data.legalActions
-      .map(({ choice, ...x }) => x)
-      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     message.content = prefix + JSON.stringify(data);
     return copy;
   };
@@ -504,11 +523,12 @@ test('DeepSeek候选在3/4/6人局面中合法推进且卡牌守恒', async () =
     const fake = async (_url, init) => {
       const body = JSON.parse(init.body),
         data = JSON.parse(body.messages.at(-1).content.split('当前局面：')[1]);
-      const best = data.legalActions.find((x) => x.action.type === 'play') || data.legalActions[0];
+      const game = room.game,
+        me = data.me;
+      const candidates = candidateActions(game, me);
+      const best = candidates.find((item) => item.type === 'play') || candidates[0];
       return Response.json({
-        choices: [
-          { message: { content: JSON.stringify({ choice: best.choice, plan: '按公开证据推进' }) } }
-        ]
+        choices: [{ message: { content: JSON.stringify(publicCommand(game, me, best)) } }]
       });
     };
     let steps = 0;

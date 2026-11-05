@@ -1219,9 +1219,10 @@ export class GameRoom {
           metric = value;
         },
         {
-          observationWindow: this.env.DEEPSEEK_OBSERVATIONS,
           onReasoning: (value) => {
-            reasoningContent = value;
+            reasoningContent = reasoningContent
+              ? reasoningContent + '\n\n【重新决策】\n' + value
+              : value;
           }
         }
       );

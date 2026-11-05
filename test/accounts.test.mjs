@@ -555,7 +555,7 @@ test('DeepSeek 决策正常执行，但不再生成请求和响应审计日志',
       return Response.json({
         choices: [
           {
-            message: { content: '{"choice":0}', reasoning_content: '思考过程' },
+            message: { content: '{"type":"end"}', reasoning_content: '思考过程' },
             finish_reason: 'stop'
           }
         ],
@@ -624,7 +624,7 @@ test('房间只保存单键统计记录，管理员日志接口可读取且普�
   const original = globalThis.fetch;
   globalThis.fetch = async () =>
     Response.json({
-      choices: [{ message: { content: '{"choice":0}', reasoning_content: '评估防御后行动' } }],
+      choices: [{ message: { content: '{"type":"end"}', reasoning_content: '评估防御后行动' } }],
       usage: { prompt_tokens: 123 }
     });
   try {

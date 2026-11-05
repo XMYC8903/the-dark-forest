@@ -2,7 +2,72 @@ import { CARDS, GALAXIES, distance } from '../shared/game.js';
 import { gameView, deepSeekRulebook, playerIntelView, newDeepSeekSession } from './room-core.js';
 import { aliasText, migrateAliases } from './prompt-alias.js';
 
-function candidateActions(game, me) {
+const cardLabel = (key) => {
+  const card = CARDS[key];
+  return card ? card.name + (card.face ? `·${card.face}` : '') : '未知卡牌';
+};
+
+export function publicCommand(game, me, action) {
+  const hand = game.players[me].hand;
+  const name = (id) => cardLabel(hand.find((card) => card.id === id)?.key);
+  if (action.type === 'play')
+    return {
+      type: 'play',
+      card: name(action.cardId),
+      ...(action.target === undefined ? {} : { target: action.target })
+    };
+  if (action.type === 'respond')
+    return { type: 'respond', card: action.cardId ? name(action.cardId) : null };
+  if (action.type === 'discard') return { type: 'discard', cards: action.ids.map(name).sort() };
+  if (action.type === 'withdraw') {
+    const strike = game.strikes.find((item) => item.id === action.strikeId);
+    return {
+      type: 'withdraw',
+      card: cardLabel(strike.card.key),
+      target: strike.target,
+      progress: strike.progress
+    };
+  }
+  if (action.type === 'settle') return { type: 'settle', chosen: action.chosen };
+  if (action.type === 'escape') return { type: 'escape', use: action.use };
+  return { type: action.type };
+}
+
+export function resolveCommand(game, me, actions, raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const input = raw.action && typeof raw.action === 'object' ? raw.action : raw;
+  let command;
+  if (input.type === 'play')
+    command = {
+      type: 'play',
+      card: input.card,
+      ...(input.target == null ? {} : { target: input.target })
+    };
+  else if (input.type === 'respond') command = { type: 'respond', card: input.card ?? null };
+  else if (
+    input.type === 'discard' &&
+    Array.isArray(input.cards) &&
+    input.cards.every((name) => typeof name === 'string')
+  )
+    command = { type: 'discard', cards: [...input.cards].sort() };
+  else if (input.type === 'withdraw')
+    command = {
+      type: 'withdraw',
+      card: input.card,
+      target: input.target,
+      progress: input.progress
+    };
+  else if (input.type === 'settle') command = { type: 'settle', chosen: input.chosen ?? null };
+  else if (input.type === 'escape') command = { type: 'escape', use: input.use };
+  else if (input.type === 'end') command = { type: 'end' };
+  else return null;
+  const encoded = JSON.stringify(command);
+  return (
+    actions.find((action) => JSON.stringify(publicCommand(game, me, action)) === encoded) || null
+  );
+}
+
+export function candidateActions(game, me) {
   const p = game.players[me],
     pending = game.pending;
   if (!p?.alive || game.over) return [];
@@ -69,25 +134,23 @@ function publicState(view, me) {
     active: view.active,
     played: view.played,
     markers: view.markers,
-    ownBroadcastKey: view.ownBroadcastKey,
+    ownBroadcast: view.ownBroadcastKey ? cardLabel(view.ownBroadcastKey) : undefined,
     players: view.players.map((p) => ({
       id: p.id,
       name: p.name,
       alive: p.alive,
       energy: p.energy,
       escapeUsed: p.escapeUsed,
-      builds: p.builds.map((c) => c.key),
+      builds: p.builds.map((c) => cardLabel(c.key)),
       handCount: p.handCount,
-      ...(p.id === me
-        ? { galaxy: p.galaxy, hand: p.hand.map((c) => ({ id: c.id, key: c.key })) }
-        : {})
+      ...(p.id === me ? { galaxy: p.galaxy, hand: p.hand.map((c) => cardLabel(c.key)) } : {})
     })),
     strikes: view.strikes.map((s) => ({
       owner: s.owner,
       target: s.target,
       progress: s.progress,
       ...(s.required === undefined ? {} : { required: s.required }),
-      cardKey: s.card.key
+      card: cardLabel(s.card.key)
     })),
     latest: view.latest
       ? {
@@ -181,25 +244,30 @@ export async function decideDeepSeek(
     emit();
     return null;
   }
-  if (session && session.privacyVersion !== 1) {
+  if (
+    session &&
+    (session.privacyVersion !== 1 ||
+      !Number.isInteger(session.intelCursor) ||
+      session.intelCursor > history.length)
+  ) {
     const safe = newDeepSeekSession(game, me, history);
     for (const key of Object.keys(session)) delete session[key];
     Object.assign(session, safe);
   }
   if (session) migrateAliases(session);
+  if (session && session.intelCursor < history.length) {
+    const evidence = playerIntelView(history.slice(session.intelCursor), me);
+    session.messages.push({
+      role: 'user',
+      content:
+        '牌局更新（记住，勿输出）：\n' +
+        aliasText(JSON.stringify({ publicEvidence: evidence }), session)
+    });
+    session.intelCursor = history.length;
+  }
   cleanLegacySession(session);
-  const requestedWindow = [0, 3, 24, '0', '3', '24'].includes(options.observationWindow)
-    ? Number(options.observationWindow)
-    : 24;
-  // Only deduplicate when the entire event history has already entered this
-  // seat's safe conversation. Standalone or stale sessions keep the old window.
-  const observationWindow =
-    session?.privacyVersion === 1 && session.intelCursor === history.length ? requestedWindow : 24;
-  Object.assign(metric, {
-    requestedObservationWindow: requestedWindow,
-    observationWindow,
-    promptVersion: 'compact-cards-v3-alias-obs' + observationWindow
-  });
+  if (session?.messages?.[0]?.role === 'system') session.messages[0].content = deepSeekRulebook();
+  Object.assign(metric, { observationWindow: 0, promptVersion: 'direct-card-names-v1' });
   const actions = candidateActions(game, me);
   metric.candidates = actions.length;
   if (!actions.length) {
@@ -221,44 +289,21 @@ export async function decideDeepSeek(
       game.pending.caster === me
         ? game.pending.card.key
         : game.pending.responses.find((r) => r.actor === me)?.card.key;
-  const legalActions = actions.map((action, choice) => ({
-    choice,
-    action,
-    ...(action.cardId ? { cardKey: pCardKey(game, me, action.cardId) } : {}),
-    ...(action.ids ? { cardKeys: action.ids.map((id) => pCardKey(game, me, id)) } : {})
-  }));
-  const observations = playerIntelView(
-    observationWindow ? history.slice(-observationWindow) : [],
-    me
-  ).map((e) => ({
-    type: e.type,
-    actor: e.actor,
-    target: e.target,
-    ...(e.key ? { cardKey: e.key } : {})
-  }));
-  const aliasSession = session || {};
+  const workingSession = session || newDeepSeekSession(game, me, history);
+  const aliasSession = workingSession;
   const decisionMessage = {
     role: 'user',
     content:
-      '现在请决策。卡牌 key 对应规则书的完整牌面；id 用于区分手牌，星系编号对应星图。只输出 JSON：{"choice":候选编号}。当前局面：' +
+      '现在请按规则直接输出一个行动 JSON，不要输出候选编号。卡牌使用完整牌名，广播牌附上合作或伪装牌面。当前局面：' +
       aliasText(
         JSON.stringify({
           me,
-          state: publicState(view, me),
-          ...(observationWindow ? { observations } : {}),
-          legalActions
+          state: publicState(view, me)
         }),
         aliasSession
       )
   };
-  const conversation = session?.messages || [
-    { role: 'system', content: deepSeekRulebook() },
-    {
-      role: 'user',
-      content: '当前局面：' + aliasText(JSON.stringify(publicState(view, me)), aliasSession)
-    }
-  ];
-  const messages = session?.messages || conversation;
+  const messages = workingSession.messages;
   const controller = new AbortController(),
     timer = setTimeout(() => controller.abort(), 30000);
   const requestBody = {
@@ -269,12 +314,12 @@ export async function decideDeepSeek(
     response_format: { type: 'json_object' },
     messages: [...messages, decisionMessage]
   };
-  const body = JSON.stringify(requestBody),
-    bytes = (value) => new TextEncoder().encode(value).byteLength;
+  const bytes = (value) => new TextEncoder().encode(value).byteLength;
+  const attempts = [];
   Object.assign(metric, {
     apiCalled: true,
     status: 'request_error',
-    requestBytes: bytes(body),
+    requestBytes: 0,
     messageCount: requestBody.messages.length,
     systemBytes: requestBody.messages
       .filter((m) => m.role === 'system')
@@ -282,89 +327,125 @@ export async function decideDeepSeek(
     decisionBytes: bytes(decisionMessage.content),
     historyBytes: messages
       .filter((m) => m.role !== 'system')
-      .reduce((n, m) => n + bytes(m.content), 0)
+      .reduce((n, m) => n + bytes(m.content), 0),
+    attempts
   });
+  const count = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
   try {
-    const response = await fetchImpl('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body
-    });
-    const raw = await response.text();
-    metric.httpStatus = response.status;
-    if (!response.ok) {
-      metric.status = 'http_error';
-      console.warn('DeepSeek API returned status', response.status);
-      return null;
-    }
-    metric.status = 'invalid_response';
-    const data = JSON.parse(raw);
-    const reasoning = data?.choices?.[0]?.message?.reasoning_content;
-    if (typeof reasoning === 'string' && reasoning) {
-      try {
-        options.onReasoning?.(reasoning);
-      } catch {
-        /* Recording must not change the decision. */
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const body = JSON.stringify({
+        ...requestBody,
+        messages: attempt
+          ? [
+              ...requestBody.messages,
+              {
+                role: 'user',
+                content: '上次行动不合法或格式有误。请根据当前局面和规则重新输出一个合法行动 JSON。'
+              }
+            ]
+          : requestBody.messages
+      });
+      const item = { requestBytes: bytes(body), status: 'request_error' };
+      attempts.push(item);
+      metric.requestBytes += item.requestBytes;
+      const response = await fetchImpl('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body
+      });
+      const raw = await response.text();
+      item.httpStatus = metric.httpStatus = response.status;
+      if (!response.ok) {
+        item.status = metric.status = 'http_error';
+        console.warn('DeepSeek API returned status', response.status);
+        return null;
       }
+      item.status = metric.status = 'invalid_response';
+      const data = JSON.parse(raw);
+      const reasoning = data?.choices?.[0]?.message?.reasoning_content;
+      if (typeof reasoning === 'string' && reasoning) {
+        try {
+          options.onReasoning?.(reasoning);
+        } catch {
+          /* Recording must not change the decision. */
+        }
+      }
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof data.model === 'string' && /^deepseek-[a-z0-9._-]{1,80}$/i.test(data.model))
+        metric.responseModel = data.model;
+      item.usage = {
+        promptTokens: count(data.usage?.prompt_tokens),
+        cacheHitTokens: count(
+          data.usage?.prompt_cache_hit_tokens ?? data.usage?.prompt_tokens_details?.cached_tokens
+        ),
+        cacheMissTokens: count(data.usage?.prompt_cache_miss_tokens),
+        completionTokens: count(data.usage?.completion_tokens),
+        reasoningTokens: count(data.usage?.completion_tokens_details?.reasoning_tokens),
+        totalTokens: count(data.usage?.total_tokens)
+      };
+      metric.usage = Object.fromEntries(
+        Object.keys(item.usage).map((key) => [
+          key,
+          attempts.every((entry) => Number.isSafeInteger(entry.usage?.[key]))
+            ? attempts.reduce((sum, entry) => sum + entry.usage[key], 0)
+            : null
+        ])
+      );
+      metric.finishReason = ['stop', 'length', 'content_filter', 'tool_calls'].includes(
+        data?.choices?.[0]?.finish_reason
+      )
+        ? data.choices[0].finish_reason
+        : 'unknown';
+      if (typeof content !== 'string') {
+        item.status = metric.status = 'missing_content';
+        return null;
+      }
+      if (data?.choices?.[0]?.finish_reason === 'length') {
+        item.status = metric.status = 'truncated';
+        return null;
+      }
+      let result;
+      try {
+        result = JSON.parse(content);
+      } catch {
+        result = null;
+      }
+      const action = resolveCommand(game, me, actions, result);
+      if (!action) {
+        item.status = metric.status = 'invalid_action';
+        if (!attempt && !controller.signal.aborted) continue;
+        console.warn('DeepSeek API returned an invalid action');
+        return null;
+      }
+      const saved = JSON.stringify(publicCommand(game, me, action));
+      if (session?.messages)
+        session.messages.push(decisionMessage, { role: 'assistant', content: saved });
+      item.status = metric.status = 'success';
+      metric.actionType = action.type;
+      onDecision?.({ actionType: action.type, source: 'model', candidates: actions.length });
+      return action;
     }
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof data.model === 'string' && /^deepseek-[a-z0-9._-]{1,80}$/i.test(data.model))
-      metric.responseModel = data.model;
-    const count = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
-    metric.usage = {
-      promptTokens: count(data.usage?.prompt_tokens),
-      cacheHitTokens: count(
-        data.usage?.prompt_cache_hit_tokens ?? data.usage?.prompt_tokens_details?.cached_tokens
-      ),
-      cacheMissTokens: count(data.usage?.prompt_cache_miss_tokens),
-      completionTokens: count(data.usage?.completion_tokens),
-      reasoningTokens: count(data.usage?.completion_tokens_details?.reasoning_tokens),
-      totalTokens: count(data.usage?.total_tokens)
-    };
-    metric.finishReason = ['stop', 'length', 'content_filter', 'tool_calls'].includes(
-      data?.choices?.[0]?.finish_reason
-    )
-      ? data.choices[0].finish_reason
-      : 'unknown';
-    if (typeof content !== 'string') {
-      metric.status = 'missing_content';
-      console.warn('DeepSeek API returned no message content');
-      return null;
-    }
-    if (data?.choices?.[0]?.finish_reason === 'length') {
-      metric.status = 'truncated';
-      console.warn('DeepSeek API output was truncated');
-      return null;
-    }
-    metric.status = 'invalid_choice';
-    const result = JSON.parse(content),
-      choice = result.choice;
-    if (!Number.isInteger(choice) || choice < 0 || choice >= actions.length) {
-      console.warn('DeepSeek API returned an invalid action choice');
-      return null;
-    }
-    const saved = JSON.stringify({ choice });
-    if (session?.messages)
-      session.messages.push(decisionMessage, { role: 'assistant', content: saved });
-    Object.assign(metric, { status: 'success', actionType: actions[choice].type, choice });
-    onDecision?.({
-      actionType: actions[choice].type,
-      source: 'model',
-      choice,
-      candidates: actions.length
-    });
-    return actions[choice];
+    return null;
   } catch (error) {
-    if (error?.name === 'AbortError') metric.status = 'timeout';
+    if (error?.name === 'AbortError') {
+      metric.status = 'timeout';
+      if (attempts.length) attempts.at(-1).status = 'timeout';
+    }
     console.warn('DeepSeek API request failed', error?.name || 'unknown error');
     return null;
   } finally {
+    const usage = attempts.find((item) => item.usage)?.usage;
+    if (usage)
+      metric.usage = Object.fromEntries(
+        Object.keys(usage).map((key) => [
+          key,
+          attempts.every((item) => Number.isSafeInteger(item.usage?.[key]))
+            ? attempts.reduce((sum, item) => sum + item.usage[key], 0)
+            : null
+        ])
+      );
     clearTimeout(timer);
     emit();
   }
-}
-
-function pCardKey(game, me, id) {
-  return game.players[me].hand.find((c) => c.id === id)?.key;
 }

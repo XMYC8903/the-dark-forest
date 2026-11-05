@@ -4,6 +4,9 @@ import { pathToFileURL } from 'node:url';
 export function summarize(entries, groups = true) {
   const records = entries.filter((e) => e.kind === 'deepseek' && e.schemaVersion === 1),
     calls = records.filter((e) => e.apiCalled),
+    attempts = calls.flatMap((e) =>
+      Array.isArray(e.attempts) && e.attempts.length ? e.attempts : [e]
+    ),
     statuses = {},
     usage = {};
   for (const row of records) statuses[row.status] = (statuses[row.status] || 0) + 1;
@@ -15,14 +18,14 @@ export function summarize(entries, groups = true) {
     'reasoningTokens',
     'totalTokens'
   ]) {
-    const known = calls.map((e) => e.usage?.[field]).filter(Number.isSafeInteger);
+    const known = attempts.map((e) => e.usage?.[field]).filter(Number.isSafeInteger);
     usage[field] = {
       sum: known.reduce((n, v) => n + v, 0),
       knownCalls: known.length,
-      unknownCalls: calls.length - known.length
+      unknownCalls: attempts.length - known.length
     };
   }
-  const paired = calls.filter(
+  const paired = attempts.filter(
     (e) =>
       Number.isSafeInteger(e.usage?.cacheHitTokens) &&
       Number.isSafeInteger(e.usage?.cacheMissTokens)
@@ -35,7 +38,7 @@ export function summarize(entries, groups = true) {
     .sort((a, b) => a - b);
   const result = {
     decisions: records.length,
-    apiCalls: calls.length,
+    apiCalls: attempts.length,
     forced: statuses.forced || 0,
     statuses,
     fallbacks: records.filter((e) => e.fallback === true).length,

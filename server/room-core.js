@@ -341,7 +341,7 @@ export function deepSeekRulebook() {
 
 卡牌数据按列排列：[key,名称,类型,费用,数量,射程,面,等级,产能,防御,依赖恒星,逃生,规则,详情]；null 表示无此属性：${JSON.stringify(cards)}
 
-收到牌局更新时，仅把它作为新信息记入判断，不要输出普通聊天内容。只有当你收到“现在请决策”时，才从给定的合法候选中选择一个，并严格只输出 JSON：{"choice":候选编号}。不能创造候选之外的动作。`;
+收到牌局更新时仅记住信息，不要输出聊天。收到“现在请决策”时，严格输出一个 JSON 行动：出牌 {"type":"play","card":"牌名","target":星系编号}（建设不需要 target）；结束 {"type":"end"}；弃牌 {"type":"discard","cards":["牌名"]}；广播回应 {"type":"respond","card":"牌名"} 或 {"type":"respond","card":null} 表示不回应；广播结算 {"type":"settle","chosen":玩家编号}；逃生 {"type":"escape","use":true或false}；撤回打击 {"type":"withdraw","card":"牌名","target":星系编号,"progress":已飞回合数}。广播牌名称必须带牌面，例如“恒星广播·合作”或“恒星广播·伪装”；其他牌使用完整牌名。玩家编号和星系编号均为数字。历史中的候选编号是旧格式，当前只输出行动 JSON。`;
 }
 function stateDelta(previous, current) {
   if (!previous) return current;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../shared/game.js';
 import { newRoom, appendDeepSeekUpdates } from '../server/room-core.js';
-import { decideDeepSeek } from '../server/deepseek.js';
+import { decideDeepSeek, candidateActions, publicCommand } from '../server/deepseek.js';
 
 const UUID_GLOBAL = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
@@ -46,18 +46,16 @@ test('别名只作用于提示词，动作仍能按真实 id 结算', async () =
     async (_url, init) => {
       const body = JSON.parse(init.body);
       const payload = JSON.parse(body.messages.at(-1).content.split('当前局面：')[1]);
-      // The model only ever sees aliases and never returns ids.
       assert.equal(body.messages.at(-1).content.match(UUID_GLOBAL), null);
-      const play =
-        payload.legalActions.find((x) => x.action.type === 'play') || payload.legalActions[0];
+      assert.equal(payload.legalActions, undefined);
+      const play = candidateActions(room.game, 0).find((x) => x.type === 'play') || { type: 'end' };
       return Response.json({
-        choices: [{ message: { content: JSON.stringify({ choice: play.choice }) } }]
+        choices: [{ message: { content: JSON.stringify(publicCommand(room.game, 0, play)) } }]
       });
     },
     seat,
     null,
-    null,
-    { observationWindow: 3 }
+    null
   );
   assert.ok(action);
   assert.equal(room.game.allPhysicalCards().length, before, '模型回复不应改变牌堆总数');
@@ -83,16 +81,14 @@ test('进行中的旧会话同时迁移历史与当前提示词，动作仍使�
     async (_url, init) => {
       const body = JSON.parse(init.body),
         last = JSON.parse(body.messages.at(-1).content.split('当前局面：')[1]);
-      emitted = last.state.players[0].hand.find(
-        (c) => c.key === card.key && c.id === session.aliases[uuid]
-      ).id;
-      assert.ok(body.messages[1].content.includes(emitted));
-      assert.equal(body.messages[1].content.includes(uuid), false);
-      const candidate = last.legalActions.find((c) => c.action.cardId === emitted);
+      const candidate = candidateActions(game, 0).find((c) => c.cardId === uuid);
       assert.ok(candidate);
-      return Response.json({
-        choices: [{ message: { content: JSON.stringify({ choice: candidate.choice }) } }]
-      });
+      const command = publicCommand(game, 0, candidate);
+      emitted = command.card;
+      assert.ok(last.state.players[0].hand.includes(emitted));
+      assert.ok(body.messages[1].content.includes(session.aliases[uuid]));
+      assert.equal(body.messages[1].content.includes(uuid), false);
+      return Response.json({ choices: [{ message: { content: JSON.stringify(command) } }] });
     },
     session
   );
