@@ -9,6 +9,7 @@ export const EVENT_FILTER_CATEGORIES = [
   ['lock', '科技锁死'],
   ['escaped', '光速跃迁'],
   ['eliminated', '文明消逝'],
+  ['discard', '弃牌'],
   ['energy', '能量变化']
 ];
 
@@ -25,6 +26,7 @@ const historyEventTypes = new Set([
   'lock',
   'escaped',
   'eliminated',
+  'discard',
   'production'
 ]);
 export const NO_EVENT_TARGET = 'no_target';
@@ -39,7 +41,8 @@ export function observerEventCategories(event) {
       'launch',
       'lock',
       'escaped',
-      'eliminated'
+      'eliminated',
+      'discard'
     ].includes(event.type)
   )
     categories.add(event.type);
@@ -160,7 +163,7 @@ export function observerEventRoles(event) {
 export function observerEventHasNoTarget(event) {
   if (observerEventRoles(event).targets.size) return false;
   return (
-    ['build', 'production', 'escaped', 'miss', 'system_hit'].includes(event.type) ||
+    ['build', 'production', 'escaped', 'miss', 'system_hit', 'discard'].includes(event.type) ||
     event.targetPlayerId === null ||
     event.victim === null
   );

@@ -103,6 +103,7 @@ test('打击结算按结果分类，能量变化可与其他分类重叠', () =>
       '科技锁死',
       '光速跃迁',
       '文明消逝',
+      '弃牌',
       '能量变化'
     ]
   );
@@ -273,8 +274,8 @@ test('无目标可与玩家多选，旧记录的未知目标不被误认为无�
   );
 });
 
-test('公开记录仅展示指定分类，不展示弃牌、撤回打击、对局结束等事件', () => {
-  for (const type of ['discard', 'withdraw', 'gameover', 'unknown']) {
+test('公开记录仅展示指定分类，不展示撤回打击、对局结束等事件', () => {
+  for (const type of ['withdraw', 'gameover', 'unknown']) {
     const event = { type, cost: 1, energyChanges: [{ before: 2, after: 1 }] };
     assert.equal(isPublicHistoryEvent(event), false);
     assert.equal(matchesObserverEvent(event, new Set(), new Set()), false);
@@ -293,9 +294,28 @@ test('公开记录仅展示指定分类，不展示弃牌、撤回打击、对�
     'lock',
     'escaped',
     'eliminated',
+    'discard',
     'production'
   ])
     assert.equal(isPublicHistoryEvent({ type }), true, type);
+});
+
+test('弃牌事件保留所弃卡牌，并支持事件和无目标筛选', () => {
+  const room = { game: { round: 2, turnIndex: 4, players: [] }, intel: [] };
+  gatherIntel(room, [
+    { type: 'discard', player: 1, cards: [{ key: 'solar' }, { key: 'nuclear' }] }
+  ]);
+  const event = room.intel[0];
+  assert.deepEqual(
+    event.cards.map((card) => card.cardName),
+    ['太阳能阵列', '热核打击']
+  );
+  assert.equal(observerEventCategoryLabel(event), '弃牌');
+  assert.equal(
+    matchesObserverEvent(event, new Set(['discard']), new Set([1]), new Set([NO_EVENT_TARGET])),
+    true
+  );
+  assert.equal(matchesObserverEvent(event, new Set(['discard']), new Set([0])), false);
 });
 
 test('同一枚打击的结算和落空记录只展示结算，独立打击仍保留', () => {

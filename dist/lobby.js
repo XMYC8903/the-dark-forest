@@ -17,7 +17,7 @@ import {
   observerEventCategoryLabel,
   observerEventHasNoTarget,
   observerEventRoles
-} from './observer-event-filter.js?v=20261104-impact-building-loss1';
+} from './observer-event-filter.js?v=20261105-discard1';
 import {
   launchDemo,
   launchOnline,
@@ -1066,7 +1066,7 @@ function renderSpectator(view = room) {
     if (e.type === 'lock')
       return `${who} 使用「${e.cardName || '科技锁死'}」→ ${target}${e.victim !== null && e.victim !== undefined ? ' · ' + actorName(e.victim) + ' 建设被拆除' : ''}${e.removed?.length ? ' · 拆除 ' + e.removed.map((c) => c.cardName).join('、') : ''} · 返还 ${e.refund || 0} 能量`;
     if (e.type === 'discard')
-      return `${who} 弃置 ${e.cards?.map((c) => c.cardName).join('、') || '手牌'}并补牌`;
+      return `${who} 弃置 ${e.cards?.map((c) => c.cardName || c.name || CARDS[c.key]?.name || '未知卡牌').join('、') || '手牌'}并补牌`;
     if (e.type === 'damage')
       return `${who} 在 ${target} 损失建设：${e.cards?.map((c) => c.cardName).join('、') || '无'} · ${e.effect === 'star_discard' ? '恒星熄灭' : '打击摧毁'}`;
     if (e.type === 'escaped')
