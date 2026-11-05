@@ -284,7 +284,7 @@ function downloadReplay(replay) {
       '_' +
       [finished.getHours(), finished.getMinutes()]
         .map((part) => String(part).padStart(2, '0'))
-        .join('-');
+        .join('');
   const accountName =
     String(social.account?.name || '观测者')
       .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
