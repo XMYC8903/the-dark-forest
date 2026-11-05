@@ -1,7 +1,7 @@
 import {
   validateReplayArchive,
   sanitizeReplayArchive
-} from './replay-archive.js?v=20261105-replay-id1';
+} from './replay-archive.js?v=20261105-player-thoughts1';
 import {
   saveResumeArchive,
   loadResumeArchive,
@@ -437,7 +437,7 @@ function leaveReplay() {
   observerPlayback.stop();
   show('replays');
 }
-function showReplayThoughts() {
+function showReplayThoughts(playerId) {
   if (!replayArchive) return;
   replayPlaying = false;
   clearReplayTimer();
@@ -446,13 +446,16 @@ function showReplayThoughts() {
   const overlay = document.createElement('div');
   overlay.className = 'overlay replay-thoughts-overlay';
   const phaseNames = { turn: '行动', respond: '回应广播', settle: '广播结算', escape: '逃生' };
+  const name = replayArchive.players[playerId]?.name || 'DeepSeek';
   const entries = thoughts
-    .map((entry, index) => {
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => entry.player === playerId)
+    .map(({ entry, index }) => {
       const status = !entry.applied ? ' · 未执行' : entry.fallback ? ' · 本地策略接管' : '';
-      return `<details data-thought-index="${index}"><summary>第 ${entry.round} 轮 · ${esc(replayArchive.players[entry.player]?.name || 'DeepSeek')} · ${esc(phaseNames[entry.phase] || '决策')}${status}</summary></details>`;
+      return `<details data-thought-index="${index}"><summary>第 ${entry.round} 轮 · ${esc(phaseNames[entry.phase] || '决策')}${status}</summary></details>`;
     })
     .join('');
-  overlay.innerHTML = `<section class="dialog replay-thoughts-dialog" role="dialog" aria-modal="true" aria-labelledby="replay-thoughts-title"><h2 id="replay-thoughts-title">DeepSeek 思考记录</h2><p>记录来自对局中 DeepSeek 返回的思考内容，可能包含当局私有信息。</p><div class="replay-thoughts-list">${entries || '<p>这局回放没有可用的思考记录。</p>'}</div><div class="dialog-actions"><button type="button" class="secondary-btn replay-thoughts-close">关闭</button></div></section>`;
+  overlay.innerHTML = `<section class="dialog replay-thoughts-dialog" role="dialog" aria-modal="true" aria-labelledby="replay-thoughts-title"><h2 id="replay-thoughts-title">${esc(name)} 的思考记录</h2><p>记录来自对局中 DeepSeek 返回的思考内容，可能包含当局私有信息。</p><div class="replay-thoughts-list">${entries || '<p>这位玩家没有可用的思考记录。</p>'}</div><div class="dialog-actions"><button type="button" class="secondary-btn replay-thoughts-close">关闭</button></div></section>`;
   const close = () => {
     document.removeEventListener('keydown', onKey);
     overlay.remove();
@@ -494,7 +497,6 @@ function bindReplayControls() {
     input = root.querySelector('#replay-round'),
     jump = root.querySelector('#replay-jump');
   if (!play) return;
-  root.querySelector('#replay-thoughts').onclick = showReplayThoughts;
   play.innerHTML = replayToggleIcon(replayPlaying);
   play.setAttribute('aria-label', replayPlaying ? '暂停回放' : '继续播放回放');
   play.setAttribute('aria-pressed', String(replayPlaying));
@@ -1277,7 +1279,7 @@ function renderSpectator(view = room) {
   const playerColumn = (players, side) =>
     `<aside class="observer-player-column ${side}">${players.map((p) => observerPlayerHTML(p, game, strikesFor)).join('')}</aside>`;
   const replayControls = room.isReplay
-    ? `<div class="observer-replay-controls" aria-label="回放控制"><button id="replay-back-step" type="button" aria-label="回溯一步">←</button><button id="replay-toggle" type="button" aria-label="${replayPlaying ? '暂停回放' : '继续播放回放'}" aria-pressed="${replayPlaying}">${replayToggleIcon(replayPlaying)}</button><button id="replay-forward-step" type="button" aria-label="前进一步">→</button><label>第 <input id="replay-round" type="number" min="1" max="${Math.max(1, replayArchive?.rounds || game.round)}" value="${game.round}"> 轮</label><button id="replay-jump" type="button">跳转</button><small>${replayIndex + 1} / ${replayArchive?.frames.length || 1}</small><button id="replay-thoughts" type="button">思考记录</button></div>`
+    ? `<div class="observer-replay-controls" aria-label="回放控制"><button id="replay-back-step" type="button" aria-label="回溯一步">←</button><button id="replay-toggle" type="button" aria-label="${replayPlaying ? '暂停回放' : '继续播放回放'}" aria-pressed="${replayPlaying}">${replayToggleIcon(replayPlaying)}</button><button id="replay-forward-step" type="button" aria-label="前进一步">→</button><label>第 <input id="replay-round" type="number" min="1" max="${Math.max(1, replayArchive?.rounds || game.round)}" value="${game.round}"> 轮</label><button id="replay-jump" type="button">跳转</button><small>${replayIndex + 1} / ${replayArchive?.frames.length || 1}</small></div>`
     : '';
   root.innerHTML = `<header class="observer-header"><div class="brand" aria-label="黑暗森林"><span class="brand-mark">◉</span><span><b>黑暗森林</b><small>THE DARK FOREST</small></span></div><div class="top-status"><span class="live-dot"></span>${room.isReplay ? '对局回放' : '在线房间'}<span class="status-separator"></span><span class="spectator-connect">${room.isReplay ? '本地播放' : connected ? '实时同步' : '连接中…'}</span></div><nav><button class="quiet-btn observer-exit" id="observer-exit">${room.isReplay ? '退出回放' : '退出观战'}</button></nav></header><div class="observer-room-toolbar${room.isReplay ? ' is-replay' : ''}"><div class="room-title"><span class="section-index">01 /</span><h1>${esc(room.name)}</h1><span class="pill">${room.isReplay ? '回放' : '在线房间'}</span></div>${replayControls}<div class="round-info"><span>第 ${String(game.round).padStart(2, '0')} 轮</span><span class="toolbar-divider"></span><b>${game.over ? '对局结束' : active ? esc(active.name) + ' 的回合' : '状态同步中'}</b><span class="tiny-dot"></span>${game.pending?.kind === 'broadcast' ? `<small>广播回应中 · ${esc(galaxyName(game.pending.target))}</small>` : game.pending?.kind === 'escape' ? '<small>光速飞船逃生决策中</small>' : ''}</div></div>
     <main class="observer-table-layout"><div class="observer-roster" aria-label="玩家列表，可横向滑动">${playerColumn(left, 'left')}${playerColumn(right, 'right')}</div><section class="observer-center-column${observerHistoryExpanded ? ' history-expanded' : ''}"><section class="observer-map-panel"><div class="observer-section-heading"><span>星图</span><small>公开坐标与星系状态</small></div><svg id="observer-map" viewBox="0 0 900 430" role="img" aria-label="显示全场玩家位置和打击目标的星图"></svg><div class="observer-map-legend" aria-label="玩家颜色说明">${legend}</div></section><div class="observer-playback-anchor"></div><section class="observer-history${observerShowEventRoles ? '' : ' hide-event-roles'}"><div class="observer-section-heading observer-history-heading"><span>公开事件记录</span><div class="observer-history-tools">${filterOptions}<label class="observer-role-toggle"><input type="checkbox" id="observer-show-event-roles" ${observerShowEventRoles ? 'checked' : ''}><span>显示发起者和目标</span></label><button type="button" class="observer-history-expand" id="observer-history-expand" aria-pressed="${observerHistoryExpanded}" aria-label="${observerHistoryExpanded ? '退出事件记录全屏' : '全屏显示事件记录'}">${observerHistoryIcon(observerHistoryExpanded)}</button></div></div>${events.length ? `<div class="observer-history-list">${events.map(({ event: e, key }, index) => `<div class="event-row event-${esc(e.type)}${index < newEventCount ? ' event-arriving' : ''}" data-event-key="${key}" data-event-type="${esc(e.type)}"${matchesObserverEvent(e, observerEventTypes, observerEventInitiators, observerEventTargets) ? '' : ' hidden'} style="--event-color:${observerEventCategories(e).has('miss') ? eventColors.miss : eventColors[e.type] || '#aab5c3'}"><i></i><b class="event-tag">${e.round ? `第 ${esc(e.round)} 轮 · ` : ''}${esc(observerEventCategoryLabel(e) || eventNames[e.type] || '事件')}</b><div class="event-content"><span class="event-summary">${esc(eventLine(e))}</span>${eventRolesHTML(e)}${eventDetails(e)}</div></div>`).join('')}</div>` : ''}<p class="observer-history-empty" ${events.some(({ event }) => matchesObserverEvent(event, observerEventTypes, observerEventInitiators, observerEventTargets)) ? 'hidden' : ''}>${events.length ? '没有符合条件的事件。' : '尚无公开事件。'}</p></section></section></main>`;
@@ -1360,6 +1362,28 @@ function renderSpectator(view = room) {
   const roster = root.querySelector('.observer-roster');
   if (roster) roster.scrollLeft = rosterScroll;
   for (const seat of root.querySelectorAll('[data-observer-player]')) {
+    const playerId = Number(seat.dataset.observerPlayer);
+    if (
+      room.isReplay &&
+      (replayArchive?.players[playerId]?.botType === 'deepseek' ||
+        replayArchive?.thoughts.some((entry) => entry.player === playerId))
+    ) {
+      seat.classList.add('has-replay-thoughts');
+      seat.tabIndex = 0;
+      seat.setAttribute('role', 'button');
+      seat.setAttribute(
+        'aria-label',
+        `${game.players[playerId]?.name || 'DeepSeek'}，查看思考记录`
+      );
+      seat.title = '点击查看思考记录';
+      seat.onclick = () => showReplayThoughts(playerId);
+      seat.onkeydown = (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          showReplayThoughts(playerId);
+        }
+      };
+    }
     const saved = seatScroll.get(seat.dataset.observerPlayer);
     if (!saved) continue;
     const assets = seat.querySelector('.public-assets'),

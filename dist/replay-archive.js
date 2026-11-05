@@ -315,9 +315,11 @@ export function sanitizeReplayArchive(source) {
     finishedAt: Number(source.finishedAt) || Date.now(),
     rounds: Math.max(1, Number(source.rounds) || 1),
     winner: safeIndex(source.winner),
-    players: (source.players || [])
-      .slice(0, 6)
-      .map((p, i) => ({ name: safeText(p.name || `文明 ${i + 1}`, 32), bot: Boolean(p.bot) })),
+    players: (source.players || []).slice(0, 6).map((p, i) => ({
+      name: safeText(p.name || `文明 ${i + 1}`, 32),
+      bot: Boolean(p.bot),
+      botType: ['easy', 'normal', 'hard', 'deepseek'].includes(p.botType) ? p.botType : null
+    })),
     thoughts: (Array.isArray(source.thoughts) ? source.thoughts : [])
       .slice(0, 12000)
       .filter(

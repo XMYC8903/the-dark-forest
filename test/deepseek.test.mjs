@@ -20,6 +20,7 @@ import { inferPositions, rankActions } from '../server/deepseek-tactics.js';
 test('紧凑规则表保留每张牌的所有规则和属性', () => {
   const text = deepSeekRulebook(),
     rows = JSON.parse(text.split('null 表示无此属性：')[1].split('\n')[0]);
+  assert.match(text, /使用中文进行思考/);
   assert.equal(rows.length, Object.keys(CARDS).length);
   for (const [
     key,

@@ -880,7 +880,11 @@ export class GameRoom {
       finishedAt: Date.now(),
       rounds: final.round,
       winner: final.winner,
-      players: completedRoom.members.map((p) => ({ name: p.name, bot: Boolean(p.bot) }))
+      players: completedRoom.members.map((p) => ({
+        name: p.name,
+        bot: Boolean(p.bot),
+        botType: p.bot || null
+      }))
     };
     const response = await hub(this.env, '/internal/replay-reference', { accountIds, reference });
     if (!response.ok) throw new Error((await response.text()).slice(0, 200));
@@ -909,10 +913,12 @@ export class GameRoom {
       frames = [];
     let lastMotion = null,
       firstAt = 0,
-      previousEnergy = null;
+      previousEnergy = null,
+      loggedMembers = null;
     for (const [key, meta] of ordered) {
       const record = await readLog(this.ctx.storage, key, meta);
       if (!record.state) continue;
+      if (!loggedMembers && Array.isArray(record.members)) loggedMembers = record.members;
       if (!firstAt) firstAt = record.at;
       const state = restoreGame(record.state),
         energyChanges = state.players
@@ -1017,7 +1023,10 @@ export class GameRoom {
       finishedAt: reference.finishedAt,
       rounds: final.round,
       winner: final.winner,
-      players: reference.players,
+      players: (reference.players || []).map((player, index) => ({
+        ...player,
+        botType: player.botType || loggedMembers?.[index]?.bot || null
+      })),
       thoughts,
       events,
       frames

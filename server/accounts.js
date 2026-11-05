@@ -153,7 +153,8 @@ export class AccountHub {
             name: String(ref.name || '黑暗森林对局').slice(0, 80),
             players: (ref.players || []).map((p) => ({
               name: String(p.name || '文明').slice(0, 24),
-              bot: Boolean(p.bot)
+              bot: Boolean(p.bot),
+              botType: ['easy', 'normal', 'hard', 'deepseek'].includes(p.botType) ? p.botType : null
             })),
             winner: ref.winner ?? null,
             rounds: Math.max(1, Number(ref.rounds) || 1),

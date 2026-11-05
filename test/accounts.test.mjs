@@ -88,6 +88,10 @@ test('回放按账号授权从对局日志生成，复用房间后仍可读取�
     revision: 1,
     operation: 'start',
     initial: true,
+    members: [
+      { name: '回放甲', bot: null },
+      { name: '机器人', bot: 'deepseek' }
+    ],
     state: saveGame(game),
     intelDelta: []
   };
@@ -146,7 +150,7 @@ test('回放按账号授权从对局日志生成，复用房间后仍可读取�
     game,
     members: [
       { id: 'host', name: '回放甲', accountId: alice.account.id },
-      { id: 'bot', name: '机器人', bot: 'easy' }
+      { id: 'bot', name: '机器人', bot: 'deepseek' }
     ],
     replayAccountIds: [alice.account.id, bob.account.id]
   };
@@ -157,8 +161,11 @@ test('回放按账号授权从对局日志生成，复用房间后仍可读取�
   assert.equal((await room.saveReplayArchive()).saved, 2);
   assert.equal([...f.storage.map.keys()].filter((k) => k.startsWith('replay-data:')).length, 0);
   const before = await f.storage.get(`replay-index:${alice.account.id}:${matchId}`);
+  assert.equal(before.players[1].botType, 'deepseek');
   await room.saveReplayArchive();
   assert.deepEqual(await f.storage.get(`replay-index:${alice.account.id}:${matchId}`), before);
+  delete before.players[1].botType;
+  await f.storage.put(`replay-index:${alice.account.id}:${matchId}`, before);
   room.room = newRoom('A2C4E6', 'other', '新对局', '新房主');
   assert.equal((await getReplay(outsider.token, matchId)).status, 404);
   let finishMetric;
@@ -193,6 +200,7 @@ test('回放按账号授权从对局日志生成，复用房间后仍可读取�
   assert.equal(result.replay.events.length, 1);
   assert.equal(result.replay.frames[1].game.players[0].energy, game.players[0].energy);
   assert.equal(result.replay.frames[1].game.players[0].hand.length, 4);
+  assert.equal(result.replay.players[1].botType, 'deepseek');
   assert.deepEqual(result.replay.thoughts, [
     {
       frameIndex: 1,
