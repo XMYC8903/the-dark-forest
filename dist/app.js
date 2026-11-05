@@ -1462,6 +1462,13 @@ async function animateOnlineChange(
   const before = previous.players[viewer],
     after = game.players[viewer],
     oldIds = new Set(before.hand.map((c) => c.id));
+  const revealingBroadcast =
+    game.latest?.kind === 'broadcast' && game.latest.revealed && !previous.latest?.revealed;
+  const revealedLatest = game.latest;
+  if (revealingBroadcast) {
+    $('#latest-content').innerHTML = game.latest.cards.map((c) => miniHTML(c, false)).join('');
+    $('#latest-label').textContent = `广播星系 ${game.latest.target} · 等待回应`;
+  }
   const flights = [];
   const oldPhysical = new Set(
     [...previous.players.flatMap((p) => p.builds), ...previous.strikes.map((s) => s.card)].map(
@@ -1500,17 +1507,13 @@ async function animateOnlineChange(
     if (!latestCardAlreadyHasAFlight)
       flights.push(
         flyTo(
-          game.latest.revealed ? c : { id: c.id },
+          game.latest.revealed && !revealingBroadcast ? c : { id: c.id },
           source,
           $(`#latest-content [data-latest-id="${c.id}"]`),
-          { back: !game.latest.revealed, cardSize }
+          { back: !game.latest.revealed || revealingBroadcast, cardSize }
         )
       );
   }
-  if (game.latest?.revealed && !previous.latest?.revealed)
-    $('#latest-content')
-      .querySelectorAll('.played-mini')
-      .forEach((el) => el.classList.add('batch-flip'));
   for (const card of after.hand)
     if (!oldIds.has(card.id))
       flights.push(
@@ -1519,6 +1522,12 @@ async function animateOnlineChange(
         })
       );
   await Promise.all(flights);
+  if (revealingBroadcast && game.latest === revealedLatest) {
+    renderLatestCards();
+    $('#latest-content')
+      .querySelectorAll('.played-mini')
+      .forEach((el) => el.classList.add('batch-flip'));
+  }
 }
 export async function receiveOnlineRoom(room) {
   room._clientReceivedAt ??= Date.now();
