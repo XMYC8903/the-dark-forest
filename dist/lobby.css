@@ -433,6 +433,7 @@
   margin: 12px 0 20px;
 }
 .ai-picker button {
+  position: relative;
   border: 1px solid #405966;
   border-radius: 7px;
   background: #20313b;
@@ -440,6 +441,37 @@
   font-size: 11px;
   min-height: 45px;
   color: #c3d1c5;
+  transition:
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+.ai-picker-label,
+.ai-picker-success {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+.ai-picker-label {
+  display: block;
+}
+.ai-picker-success {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+}
+.ai-picker button.add-success .ai-picker-label {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.ai-picker button.add-success .ai-picker-success {
+  opacity: 1;
+  transform: translateY(0);
 }
 .ai-picker button small {
   display: block;
@@ -457,6 +489,13 @@
   color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
   opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-picker button,
+  .ai-picker-label,
+  .ai-picker-success {
+    transition: none;
+  }
 }
 .room-start {
   width: 100%;

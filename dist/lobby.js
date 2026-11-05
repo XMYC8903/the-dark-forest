@@ -70,6 +70,8 @@ let screen = 'home',
   roomDOMState = null,
   observerHistory = null,
   observerHistoryExpanded = false;
+let addingBots = false;
+const pendingBots = [];
 const observerEventTypes = new Set(),
   observerEventInitiators = new Set(),
   observerEventTargets = new Set();
@@ -556,6 +558,38 @@ async function joinByCode(watch = false) {
     })
   );
 }
+function showBotAdded(level) {
+  const button = document.querySelector(`#room-page [data-level="${level}"]`);
+  if (!button) return;
+  clearTimeout(button.successTimer);
+  button.classList.add('add-success');
+  button.successTimer = setTimeout(() => button.classList.remove('add-success'), 1200);
+}
+
+function queueBot(level) {
+  if (!room || room.count >= 6 || (requesting && !addingBots)) return;
+  pendingBots.push(level);
+  if (addingBots) return;
+  addingBots = true;
+  const roomId = room.id;
+  void task(async () => {
+    try {
+      while (pendingBots.length && screen === 'room' && room?.id === roomId && room.count < 6) {
+        const nextLevel = pendingBots.shift();
+        const updated = await mutate('bot', { level: nextLevel });
+        if (screen !== 'room' || room?.id !== roomId) break;
+        if (updated.revision >= room.revision) room = updated;
+        roomRevision = Math.max(roomRevision, updated.revision);
+        renderRoom();
+        showBotAdded(nextLevel);
+      }
+    } finally {
+      pendingBots.length = 0;
+      addingBots = false;
+    }
+  });
+}
+
 function renderRoom() {
   if (!room) return show('home');
   const watching = room.role === 'spectator',
@@ -579,7 +613,7 @@ function renderRoom() {
   const aiPicker = Object.entries(levels)
     .map(
       ([key]) =>
-        `<button data-level="${key}" ${room.count >= 6 ? 'disabled' : ''}>＋ ${key === 'deepseek' ? 'DeepSeek' : 'AI · ' + AI_NAMES[key]}<small>${key === 'easy' ? '随机探索' : key === 'normal' ? '发展与防御' : key === 'hard' ? '推测坐标与规划' : 'DeepSeek Flash · 云端策略'}</small></button>`
+        `<button data-level="${key}" ${room.count >= 6 ? 'disabled' : ''}><span class="ai-picker-label">＋ ${key === 'deepseek' ? 'DeepSeek' : 'AI · ' + AI_NAMES[key]}<small>${key === 'easy' ? '随机探索' : key === 'normal' ? '发展与防御' : key === 'hard' ? '推测坐标与规划' : 'DeepSeek Flash · 云端策略'}</small></span><span class="ai-picker-success" aria-hidden="true">✓ 添加成功</span></button>`
     )
     .join('');
   const hostTools = room.isHost
@@ -646,28 +680,7 @@ function renderRoom() {
     .forEach((button) => (button.onclick = () => social.invitePicker()));
   $('#room-page')
     .querySelectorAll('[data-level]')
-    .forEach(
-      (button) =>
-        (button.onclick = () =>
-          task(async () => {
-            room = await mutate('bot', { level: button.dataset.level });
-            renderRoom();
-            const current = document.querySelector(
-              `#room-page [data-level="${button.dataset.level}"]`
-            );
-            if (current) {
-              current.originalLabel ??= current.innerHTML;
-              clearTimeout(current.successTimer);
-              current.classList.add('add-success');
-              current.textContent = '✓ 添加成功';
-              current.successTimer = setTimeout(() => {
-                current.classList.remove('add-success');
-                current.innerHTML = current.originalLabel;
-                delete current.originalLabel;
-              }, 1800);
-            }
-          }))
-    );
+    .forEach((button) => (button.onclick = () => queueBot(button.dataset.level)));
   $('#room-page')
     .querySelectorAll('[data-remove]')
     .forEach(
